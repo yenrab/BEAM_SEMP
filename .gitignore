@@ -5,13 +5,75 @@
 erl_crash.dump
 .concrete/DEV_MODE
 
-# rebar 2.x
-.rebar
-rel/example_project
-ebin/*.beam
-deps
 
-# rebar 3
-.rebar3
+# --------------------------------------------------------------------
+# Rebar3 build artifacts
+# --------------------------------------------------------------------
 _build/
-_checkouts/
+_rebar/
+rebar3.crashdump
+
+# EUnit and Common Test logs
+*.beam
+*.plt
+*.plt.hash
+*.log
+ct.log
+cover/
+*.gcda
+*.gcno
+
+# Dialyzer PLT files
+*.plt
+*.plt.hash
+
+# Release and packaging
+rel/
+ebin/
+*.tar.gz
+
+# --------------------------------------------------------------------
+# Linux system / editor junk
+# --------------------------------------------------------------------
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
+*.orig
+*.rej
+*.o
+*.obj
+*.so
+*.a
+*.out
+*.d
+
+# Gnome/KDE/desktop artifacts
+.Trash-*
+.DS_Store
+Thumbs.db
+.nfs*
+
+# --------------------------------------------------------------------
+# IDEs and editors
+# --------------------------------------------------------------------
+# Emacs
+\#*\#
+.\#*
+.emacs.desktop
+.emacs.desktop.lock
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-v][a-z]
+[._]sw[a-p]
+Session.vim
+.netrwhist
+tags
+*.un~
+
+# VSCode
+.vscode/
+.history/
