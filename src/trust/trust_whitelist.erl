@@ -97,7 +97,7 @@ reload() ->
 
 %% --- helper functions  ------------------------------
 -doc "Purpose:\n"
-     "Loads whitelist entries from the application's priv directory. If the priv directory "
+     "Loads certificates and whitelist entries from the application's priv directory. If the priv directory "
      "is unavailable, logs a warning and behaves as an independent node by rejecting all peers. "
      "If the whitelist file exists and contains a map, its entries are loaded into the ETS table. "
      "If the file is missing or invalid, returns `fail` to indicate that no whitelist entries "
@@ -117,13 +117,16 @@ reload() ->
      "- Time: O(n)\n"
      "- Space: O(n)\n"
      "\n"
-     "Last Modified: 2025-08-23\n".
+     "Last Modified: 2025-08-29\n".
 
 -spec load_from_priv() -> ok | fail.
 load_from_priv() ->
+    %% First, optionally auto-load every cert in priv/certs with a default spec
+    maybe_autoload_from_certs(),
+    %% Then apply explicit overrides from whitelist.config (if present)
     case whitelist_path() of
         fail ->
-            %% No priv dir available -> behave as independent node (reject all).
+	    %% No priv dir available -> behave as independent node (reject all).
             logger:warning("whitelist.config not found. Running as independent node."),
             ok;
         Path ->
@@ -137,6 +140,67 @@ load_from_priv() ->
     end.
 
 
+
+
+
+-doc "Purpose:\n"
+     "Optionally auto-loads certificate fingerprints into the whitelist ETS table when "
+     "autoloading is enabled in application configuration. Uses the default authorization "
+     "specification (`whitelist_default_spec`) for each certificate found in the configured "
+     "certs directory. Invalid default specs or unreadable certificates are skipped with warnings. "
+     "Explicit whitelist configurations can override these entries later.\n"
+     "\n"
+     "Parameters:\n"
+     "- None\n"
+     "\n"
+     "Return Value:\n"
+     "- `ok` — after processing, regardless of whether entries were added or skipped.\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: O(n)\n"
+     "- Space: O(n)\n"
+     "\n"
+     "Last Modified: 2025-08-23\n".
+
+-spec maybe_autoload_from_certs() -> ok.
+maybe_autoload_from_certs() ->
+    case application:get_env(semp, whitelist_autoload, false) of
+        true ->
+            DefaultAuthorization = application:get_env(semp, whitelist_default_spec, []),
+            case normalize_value(DefaultAuthorization) of
+                invalid ->
+                    logger:warning("whitelist: invalid default authorization ~p; autoload skipped", [DefaultAuthorization]),
+                    ok;
+                DefaultSpec ->
+                    Dir = whitelist_path(),
+                    Files = list_cert_files(Dir),
+                    lists:foreach(
+                      fun(Path) ->
+                          case read_cert_fp(Path) of
+                              {ok, FP} ->
+                                  %% insert_new so explicit config can override later
+                                  _ = ets:insert_new(?TAB, {FP, DefaultSpec}),
+                                  ok;
+                              {error, Reason} ->
+                                  logger:warning("whitelist: skipping ~ts (~p)", [Path, Reason])
+                          end
+                      end, Files),
+                    ok
+            end;
+        false ->
+            ok
+    end.
+
+
+list_cert_files(Dir) ->
+    %% Pick the extensions you use; adjust as needed
+    Pems = filelib:wildcard(filename:join(Dir, "*.pem")),
+    Crts = filelib:wildcard(filename:join(Dir, "*.crt")),
+    Cers = filelib:wildcard(filename:join(Dir, "*.cer")),
+    lists:usort(Pems ++ Crts ++ Cers).
 
 -doc "Purpose:\n"
      "Resolves the filesystem path of the whitelist configuration file. If the application's "

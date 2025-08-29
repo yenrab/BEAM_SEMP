@@ -27,10 +27,9 @@ start_link() ->
 %%                  modules => modules()}   % optional
 
 init([]) ->
-  Whitelist = {trust_whitelist, {trust_whitelist, start_link, []}, permanent, 5000, worker, [trust_whitelist]},
   Events    = {semp_events, {semp_events, start_link, []}, permanent, 5000, worker, [semp_events]},
   Listener  = {trust_listener_sup, {trust_listener_sup, start_link, []}, permanent, 5000, supervisor, [trust_listener_sup]},
-  {ok, {{one_for_one, 5, 10}, [Whitelist, Events, Listener]}}.
+  {ok, {{one_for_one, 5, 10}, [Events, Listener]}}.
 
 
 %% internal functions

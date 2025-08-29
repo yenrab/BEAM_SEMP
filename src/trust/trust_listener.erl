@@ -78,6 +78,7 @@ start_link() ->
 init([]) ->
     {ok, Port} = application:get_env(trust, port),
     TlsOpts = tls_server_opts(),
+    io:format("port: ~p~nopts: ~p~n",[Port,TlsOpts]),
     {ok, LSock} = ssl:listen(Port, TlsOpts),
     gen_server:cast(self(), accept),
     {ok, LSock}.
@@ -108,8 +109,8 @@ init([]) ->
 tls_server_opts() ->
     Base = [
         {versions, ['tlsv1.3']},
-        {alpn_advertised_protocols, [<<"trust/1">>]},
-        {verify, verify_peer},
+        {alpn_preferred_protocols, [<<"trust/1">>]},
+	{verify, verify_peer},
         {fail_if_no_peer_cert, true}
     ],
     Certs = application:get_env(trust, tls_opts, []),
