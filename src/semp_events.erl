@@ -1,22 +1,31 @@
 -module(semp_events).
--behaviour(gen_server).
 
--export([start_link/0, emit/3]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([emit/3]).
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-init([]) ->
-    {ok, #{}}.
+-doc "Purpose:\n"
+     "Emits a SEMP event by delegating to `telemetry:execute/3`. This provides\n"
+     "a thin wrapper for consistent instrumentation within the TRUST system.\n"
+     "\n"
+     "Parameters:\n"
+     "- `Name :: telemetry:event_name()` — the event name, usually a list of atoms.\n"
+     "- `Measurements :: map()` — numeric measurement values for the event.\n"
+     "- `Metadata :: map()` — additional context data for the event.\n"
+     "\n"
+     "Return Value:\n"
+     "- `ok` — telemetry event was dispatched successfully.\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: O(1)\n"
+     "- Space: O(1)\n"
+     "\n"
+     "Last Modified: 2025-08-29\n".
 
+-spec emit(telemetry:event_name(), map(), map()) -> ok.
 emit(Name, Measurements, Metadata) ->
     %% thin shim over telemetry
     telemetry:execute(Name, Measurements, Metadata).
 
-handle_call(_Req, _From, S) -> {reply, ok, S}.
-handle_cast(_Msg, S) -> {noreply, S}.
-handle_info(_Info, S) -> {noreply, S}.
-terminate(_Reason, _State) -> ok.
-code_change(_Old, S, _Extra) -> {ok, S}.
