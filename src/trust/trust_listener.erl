@@ -76,13 +76,27 @@ start_link() ->
 
 -spec init([]) -> {ok, map()} | {stop, term()}.
 init([]) ->
-    {ok, Port} = application:get_env(trust, port),
+    %% 1) Read config from the correct app
+    Port = case application:get_env(trust, port) of
+               {ok, P} -> P;
+               undefined -> error({missing_env, {beam_semp, port}})
+           end,
     TlsOpts = tls_server_opts(),
-    io:format("port: ~p~nopts: ~p~n",[Port,TlsOpts]),
-    {ok, LSock} = ssl:listen(Port, TlsOpts),
-    gen_server:cast(self(), accept),
-    {ok, LSock}.
 
+    %% 2) Try to bind (fail clearly on conflicts)
+    case ssl:listen(Port, [{reuseaddr, true} | TlsOpts]) of
+        {ok, LSock} ->
+            %io:format("port: ~p~nopts: ~p~n",[Port,[{reuseaddr,true}|TlsOpts]]),
+            self() ! accept,                             %% we use handle_info/2
+            semp_io:print_color([bold,red],"Using TRUST distribution. Node=~p", [node()]),
+            {ok, #{lsock => LSock}};
+        {error, eaddrinuse} ->
+            logger:error("trust_listener: port ~p is already in use", [Port]),
+            {stop, {listen_failed, eaddrinuse}};
+        {error, Reason} ->
+            logger:error("trust_listener: ssl:listen(~p, ...) failed: ~p", [Port, Reason]),
+            {stop, {listen_failed, Reason}}
+    end.
 
 
 -doc "Purpose:\n"

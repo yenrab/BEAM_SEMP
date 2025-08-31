@@ -10,6 +10,8 @@
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
+    %% Disable distribution ASAP (idempotent).
+    semp_kill_it_all:std_distribution(),
     semp_sup:start_link().
 
 stop(_State) ->
