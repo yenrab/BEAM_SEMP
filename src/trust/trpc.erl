@@ -22,125 +22,113 @@
 -module(trpc).
 -include("semp.hrl").
 
--export([cast/5, cast/6,call/5, call/6]).  %% cast/6 and call/6 kept as a compat wrappers; ignore last arg
+-export([cast/4, cast/5,call/4, call/5]). 
 
 -define(DEFAULT_TIMEOUT, 5000).
 -define(CACHE, ?TOKEN_CACHE_TAB).
 
 
--doc "Perform a single remote call over strict TLS (TLS 1.3, mTLS, ALPN = \"trust/1\").\n\n"
-     "Resolves HostOrIP to A/AAAA addresses, then attempts TCP+TLS to each endpoint\n"
-     "in order using the supplied Port. If a valid token is cached for the server's\n"
-     "certificate fingerprint, it is sent first (fast path); otherwise a TOKEN_ISSUE\n"
-     "is expected post-handshake. On permission denial or server-side error, the\n"
-     "server closes the connection without returning an error frame.\n\n"
-     "Options:\n"
-     "  • timeout :: non_neg_integer() (milliseconds; default 5000)\n\n"
-     "Returns {ok, Value} on success; otherwise {error, Reason} where Reason is one of:\n"
-     "dns_error | connect_failed | tls_error | protocol_error | closed | timeout | term()."
-    .
+-doc "Purpose:\n"
+     "Performs a fire-and-forget remote invocation by resolving a host or IP, then attempting "
+     "to connect and send the specified MFA with arguments. Delegates to try_endpoints/6 with "
+     "operation type `cast`.\n"
+     "\n"
+     "Parameters:\n"
+     "- `HostOrIP :: string() | binary() | inet:ip_address()` — destination hostname or IP.\n"
+     "- `Port :: integer()` — remote port to connect to.\n"
+     "- `{M,F,A} :: {module(), atom(), integer()}` — target module, function, and arity.\n"
+     "- `Args :: [term()]` — arguments to pass to the remote function.\n"
+     "- `Opts :: map()` — options; may include `timeout` (ms), default `?DEFAULT_TIMEOUT`.\n"
+     "\n"
+     "Return Value:\n"
+     "- `Result :: term()` — success value propagated from try_endpoints/6.\n"
+     "- `{error, dns_error}` — hostname could not be resolved.\n"
+     "- `{error, connect_failed}` — all endpoints failed to connect.\n"
+     "- `{error, term()}` — other error from resolution or connection.\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: Best O(1), Worst O(n)\n"
+     "- Space: O(1)\n"
+     "\n"
+     "Last Modified: 2025-09-04\n".
 
--spec call(HostOrIP :: inet:hostname() | inet:ip_address() | binary(),
-           Port     :: inet:port_number(),
-           MFA      :: {module(), atom(), non_neg_integer()},
-           Args     :: [term()],
-           Opts     :: #{timeout => non_neg_integer(), _ => term()}) ->
-          {ok, term()} |
-          {error, dns_error | connect_failed | tls_error | protocol_error | closed | timeout | term()}.
-call(HostOrIP, Port, {M,F,A}, Args, Opts) when is_integer(Port) ->
+-spec cast(
+          string() | binary() | inet:ip_address(),
+          integer(),
+          {module(), atom(), integer()},
+          [term()],
+          map()
+      ) ->
+          term()
+        | {error, dns_error}
+        | {error, connect_failed}
+        | {error, term()}.
+cast(HostOrIP, Port, {M,F,A}, Args, Opts) when is_integer(Port) ->
     Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+    logger:info("trpc: Casting (~p, ~p) to ~p on port ~p with args ~p.~n",[{M,F,A},Args,HostOrIP,Port,Opts]),
     case semp_dns:resolve(HostOrIP) of
-        {ok, IPs} -> try_endpoints(IPs, Port, {M,F,A}, Args, Timeout);
+        {ok, IPs} -> try_endpoints(cast, IPs, Port, {M,F,A}, Args, Timeout);
         {error, _}=E -> E
     end.
 
 
--doc "Compatibility wrapper.\n\n"
-     "Behaves like call/5 but ignores the sixth argument (kept for source compatibility).\n"
-     "TLS verification is always strict (verify_peer); the permissive mode is not supported.\n\n"
-     "Prefer calling call/5 directly."
-    .
-
--spec call(HostOrIP :: inet:hostname() | inet:ip_address() | binary(),
-           Port     :: inet:port_number(),
-           MFA      :: {module(), atom(), non_neg_integer()},
-           Args     :: [term()],
-           Opts     :: #{timeout => non_neg_integer(), _ => term()},
-           _Ignored :: term()) ->
-          {ok, term()} |
-          {error, dns_error | connect_failed | tls_error | protocol_error | closed | timeout | term()}.
-call(HostOrIP, Port, MFA, Args, Opts, _PermissiveTLS) ->
-    call(HostOrIP, Port, MFA, Args, Opts).
-
-
-
--doc "Attempt a strict TLS connection to each resolved endpoint in order and perform one RPC.\n\n"
-     "Given a non-empty list of IP endpoints (IPv4/IPv6) and a Port, this function iterates\n"
-     "sequentially: for each IP it builds strict TLS 1.3 options (ALPN = \"trust/1\",\n"
-     "verify_peer, SNI derived from the IP/host) and calls ssl:connect/4. On the first\n"
-     "successful TLS session it delegates to the post-handshake path to send the CALL and\n"
-     "await the RESULT, then always closes the socket and returns that outcome. If a connect\n"
-     "attempt fails, the next endpoint is tried; if all endpoints fail to connect, returns\n"
-     "{error, connect_failed}. Any errors after a successful connect (e.g., token/permission\n"
-     "failures, protocol issues, timeouts) are propagated from the post-handshake logic.\n\n"
-     "Notes:\n"
-     "  • Connection policy is sequential (not parallel) and non-permissive (no verify_none).\n"
-     "  • Socket is closed on both success and failure after post-handshake processing.\n"
-     "  • Per-endpoint connect errors are not surfaced individually—only the terminal\n"
-     "    {error, connect_failed} if none succeed."
-    .
-
--spec try_endpoints(IPs     :: [inet:ip_address()],
-                    Port    :: inet:port_number(),
-                    MFA     :: {module(), atom(), non_neg_integer()},
-                    Args    :: [term()],
-                    Timeout :: non_neg_integer()) ->
-          {ok, term()} |
-          {error, connect_failed | tls_error | protocol_error | closed | timeout | term()}.
-try_endpoints([], _Port, _MFA, _Args, _Tmo) -> {error, connect_failed};
-try_endpoints([IP|Rest], Port, MFA, Args, Timeout) ->
-    TlsOpts = tls_client_opts(host_to_sni(IP)),
-    case ssl:connect(IP, Port, TlsOpts, Timeout) of
-        {ok, Sock} ->
-            Res = after_tls(Sock, MFA, Args, Timeout),
-            ssl:close(Sock),
-            Res;
-        {error, _} ->
-            try_endpoints(Rest, Port, MFA, Args, Timeout)
-    end.
-
-
--doc "Derive an Server Name Indication (SNI) hostname for TLS.\n\n"
-     "Returns 'undefined' for IPv4/IPv6 tuple literals (SNI must be a DNS hostname per RFC 6066),\n"
-     "otherwise returns the input host as-is to be used as the SNI value. This lets callers pass\n"
-     "either a DNS name (charlist or binary) or a literal IP address; IPs will suppress SNI."
-    .
-
--spec host_to_sni(HostOrIP :: inet:ip_address() | inet:hostname() | binary()) ->
-          SNI :: undefined | inet:hostname() | binary().
-host_to_sni({_,_,_,_}) -> undefined;
-host_to_sni({_,_,_,_,_,_,_,_}) -> undefined;
-host_to_sni(H) -> H.
-
-
-
 -doc "Purpose:\n"
-     "Performs client-side post-handshake processing after TLS is established: validates the "
-     "server certificate, uses a cached token when available or receives a token issuance, "
-     "then sends the remote call and awaits the response.\n"
+     "Convenience wrapper for `cast/5` that performs a fire-and-forget remote invocation with "
+     "default options. Delegates to `cast/5` using an empty map for options.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
-     "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
-     "- `Args :: list()` — arguments payload for the remote call.\n"
-     "- `Timeout :: integer()` — receive timeout in milliseconds.\n"
+     "- `HostOrIP :: string() | binary() | inet:ip_address()` — destination hostname or IP.\n"
+     "- `Port :: integer()` — remote port to connect to.\n"
+     "- `MFA :: {module(), atom(), integer()}` — target module, function, and arity.\n"
+     "- `Args :: [term()]` — arguments to pass to the remote function.\n"
      "\n"
      "Return Value:\n"
-     "- `Result :: term()` — success value returned by send_call_and_await/4.\n"
-     "- `{:error, protocol_error}` — invalid or unexpected protocol frame received.\n"
-     "- `{:error, timeout}` — timed out waiting for a required frame.\n"
-     "- `{:error, tls_error}` — TLS-level failure (e.g., missing/invalid peer certificate).\n"
-     "- `ErrorFromSendCallAndAwait :: term()` — any error returned by send_call_and_await/4 is propagated.\n"
+     "- `Result :: term()` — success value propagated from `cast/5`.\n"
+     "- `{error, dns_error}` — hostname could not be resolved.\n"
+     "- `{error, connect_failed}` — all endpoints failed to connect.\n"
+     "- `{error, term()}` — other error from resolution or connection.\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: Best O(1), Worst O(n)\n"
+     "- Space: O(1)\n"
+     "\n"
+     "Last Modified: 2025-09-04\n".
+
+-spec cast(
+          string() | binary() | inet:ip_address(),
+          integer(),
+          {module(), atom(), integer()},
+          [term()]
+      ) ->
+          term()
+        | {error, dns_error}
+        | {error, connect_failed}
+        | {error, term()}.
+cast(HostOrIP, Port, MFA, Args) ->
+    cast(HostOrIP, Port, MFA, Args, #{}).
+
+-doc "Purpose:\n"
+     "Initiates a synchronous remote call over TRUST by resolving a host or IP, then attempting "
+     "to connect and invoke the given MFA with arguments. Delegates to try_endpoints/6 to attempt "
+     "the connection and execution across resolved IPs.\n"
+     "\n"
+     "Parameters:\n"
+     "- `HostOrIP :: string() | binary() | inet:ip_address()` — the target hostname or IP address.\n"
+     "- `Port :: integer()` — the remote port to connect to.\n"
+     "- `{M,F,A} :: {module(), atom(), integer()}` — the MFA to invoke remotely.\n"
+     "- `Args :: [term()]` — arguments for the remote function.\n"
+     "- `Opts :: map()` — call options, may include `timeout` in milliseconds (defaults to `?DEFAULT_TIMEOUT`).\n"
+     "\n"
+     "Return Value:\n"
+     "- `Result :: term()` — the result of the remote call on success.\n"
+     "- `{error, dns_error}` — host resolution failed.\n"
+     "- `{error, term()}` — any error propagated from resolution or connection.\n"
      "\n"
      "Author: Lee Barney\n"
      "Version: 0.1\n"
@@ -149,54 +137,153 @@ host_to_sni(H) -> H.
      "- Time: O(n)\n"
      "- Space: O(1)\n"
      "\n"
-     "Last Modified: 2025-08-23\n".
+     "Last Modified: 2025-09-04\n".
 
--spec after_tls(ssl:sslsocket(), {module(), atom(), non_neg_integer()}, list(), integer()) ->
-          term()
-        | {error, protocol_error}
-        | {error, timeout}
-        | {error, tls_error}.
-after_tls(Sock, {M,F,A}, Args, Timeout) ->
-    case ssl:peercert(Sock) of
-        {ok, CertBin} ->
-            FP = semp_util:cert_fingerprint_sha512(CertBin),
-            case token_for(FP) of
-                {ok, Token} ->
-                    ok = semp_util:send_frame(Sock, term_to_binary(#{t => token_present, token => Token})),
-                    send_call_and_await(Sock, {M,F,A}, Args, Timeout);
-                error ->
-                    case semp_util:recv_frame(Sock, Timeout) of
-                        {ok, Bin} ->
-                            case safe_term(Bin) of
-                                #{t := token_issue, token := Token} ->
-                                    cache_token(FP, Token),
-                                    send_call_and_await(Sock, {M,F,A}, Args, Timeout);
-                                _ -> {error, protocol_error}
-                            end;
-                        E -> E
-                    end
-            end;
-        _ -> {error, tls_error}
+-spec call(string() | binary() | inet:ip_address(), integer(), {module(), atom(), integer()}, [term()], map()) ->
+          term() | {error, term()}.
+call(HostOrIP, Port, {M,F,A}, Args, Opts) when is_integer(Port) ->
+    Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+    case semp_dns:resolve(HostOrIP) of
+        {ok, IPs} ->
+	    try_endpoints(call, IPs, Port, {M,F,A}, Args, Timeout);
+        {error, _}=E -> 
+	    E
     end.
 
 
 
 -doc "Purpose:\n"
-     "Sends a remote call request over an established TLS socket and waits for the matching "
-     "result. Validates the response shape and request identifier.\n"
+     "Convenience wrapper for `call/5` that initiates a synchronous remote call using default options. "
+     "Delegates to `call/5` with an empty map for options.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
-     "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
-     "- `Args :: [term()]` — argument list; its length must equal `A`.\n"
-     "- `Timeout :: integer()` — timeout in milliseconds for send/receive operations.\n"
+     "- `HostOrIP :: string() | binary() | inet:ip_address()` — the target hostname or IP address.\n"
+     "- `Port :: integer()` — the remote port to connect to.\n"
+     "- `MFA :: {module(), atom(), integer()}` — the MFA to invoke remotely.\n"
+     "- `Args :: [term()]` — arguments for the remote function.\n"
      "\n"
      "Return Value:\n"
-     "- `{ok, term()}` — successful result value from the remote call.\n"
-     "- `{:error, protocol_error}` — response was malformed or did not match the request id.\n"
-     "- `{:error, closed}` — socket was closed by the peer.\n"
-     "- `{:error, timeout}` — no response was received within the timeout.\n"
-     "- `OtherError :: term()` — any other error propagated unchanged from lower layers.\n"
+     "- `Result :: term()` — the result of the remote call on success.\n"
+     "- `{error, term()}` — error propagated from resolution or connection.\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: O(n)\n"
+     "- Space: O(1)\n"
+     "\n"
+     "Last Modified: 2025-09-04\n".
+
+-spec call(string() | binary() | inet:ip_address(), integer(), {module(), atom(), integer()}, [term()]) ->
+          term() | {error, term()}.
+call(HostOrIP, Port, MFA, Args) ->
+    call(HostOrIP, Port, MFA, Args, #{}).
+
+
+
+-doc "Purpose:\n"
+     "Attempts a remote operation (`call` or `cast`) by iterating through resolved IP endpoints. "
+     "For each IP, establishes a TLS connection with SNI, configures the socket for passive/binary "
+     "mode, delegates to `after_tls/5`, then closes the socket. Continues to the next IP on failure "
+     "until one succeeds or all are exhausted.\n"
+     "\n"
+     "Parameters:\n"
+     "- `CallType :: call | cast` — operation type controlling post-TLS behavior and reply handling.\n"
+     "- `IPs :: [inet:ip_address() | string()]` — ordered list of destination addresses to try.\n"
+     "- `Port :: integer()` — destination port.\n"
+     "- `MFA :: {module(), atom(), integer()}` — target module, function, and arity.\n"
+     "- `Args :: [term()]` — arguments passed to the remote function.\n"
+     "- `Timeout :: integer()` — connection (and subsequent receive) timeout in milliseconds.\n"
+     "\n"
+     "Return Value:\n"
+     "- `Result :: term()` — success value returned by `after_tls/5` for the first successful endpoint.\n"
+     "- `{error, connect_failed}` — no endpoint could be connected successfully.\n"
+     "- `OtherError :: term()` — any error propagated unchanged from `after_tls/5`.\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: Best O(1), Worst O(n)\n"
+     "- Space: O(1)\n"
+     "\n"
+     "Last Modified: 2025-09-04\n".
+
+-spec try_endpoints(
+          call | cast,
+          [inet:ip_address() | string()],
+          integer(),
+          {module(), atom(), integer()},
+          [term()],
+          integer()
+      ) ->
+          term()
+        | {error, connect_failed}.
+try_endpoints(_CallType, [], _Port, _MFA, _Args, _Tmo) -> {error, connect_failed};
+try_endpoints(CallType, [IP|Rest], Port, MFA, Args, Timeout) ->
+    TlsOpts = tls_client_opts(host_to_sni(IP)),
+    logger:info("try_endpoints: about to connect IP: ~p~n",[IP]),
+    case ssl:connect(IP, Port, TlsOpts, Timeout) of
+        {ok, Sock} ->
+		    logger:info("ssl:connect got socket: ~p~n",[Sock]),
+		    ok = ssl:setopts(Sock, [{active, false}, {mode, binary}]),
+            Res = after_tls(CallType, Sock, MFA, Args, Timeout),
+            ssl:close(Sock),
+            Res;
+        {error, Reason} ->
+		    logger:info("connect to ~p:~p failed: ~p~nTrying next IP ~p~n", [IP, Port, Reason,Rest]),
+	    try_endpoints(CallType,Rest, Port, MFA, Args, Timeout)
+    end.
+
+-doc "Purpose:\n"
+     "Converts a host or IP address into an appropriate Server Name Indication (SNI) value for TLS. "
+     "IPv4 and IPv6 addresses return `undefined` (no SNI), while hostnames are returned unchanged.\n"
+     "\n"
+     "Parameters:\n"
+     "- `Host :: inet:ip4_address() | inet:ip6_address() | string() | binary()` — the host or IP.\n"
+     "\n"
+     "Return Value:\n"
+     "- `undefined` — if the input is an IPv4 or IPv6 address.\n"
+     "- `Host` — if the input is a hostname.\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: O(1)\n"
+     "- Space: O(1)\n"
+     "\n"
+     "Last Modified: 2025-09-04\n".
+
+-spec host_to_sni(inet:ip4_address() | inet:ip6_address() | string() | binary()) ->
+          undefined | string() | binary().
+host_to_sni({_,_,_,_}) -> undefined;
+host_to_sni({_,_,_,_,_,_,_,_}) -> undefined;
+host_to_sni(H) -> H.
+
+
+-doc "Purpose:\n"
+     "Completes client-side post-TLS processing for a remote operation (`call` or `cast`). "
+     "Verifies the server certificate, attempts a token fast-path using a cached token, or "
+     "receives a newly issued token from the server, caches it, and then delegates to "
+     "send_and_maybe_wait/5 to transmit the request and (for calls) await the result. "
+     "Protocol or transport errors are returned as `{error, ...}` tuples; unexpected crashes "
+     "are wrapped and returned.\n"
+     "\n"
+     "Parameters:\n"
+     "- `CallType :: call | cast` — operation type controlling reply behavior.\n"
+     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
+     "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
+     "- `Args :: [term()]` — arguments for the remote function.\n"
+     "- `Timeout :: integer()` — timeout in milliseconds for token receive and request flow.\n"
+     "\n"
+     "Return Value:\n"
+     "- `Result :: term()` — success value returned by send_and_maybe_wait/5.\n"
+     "- `{error, {peer_cert_error, term()}}` — server certificate retrieval failed.\n"
+     "- `{error, {protocol_error, term()}}` — unexpected or invalid protocol frame.\n"
+     "- `{error, {recv_failed, term()}}` — transport receive error.\n"
+     "- `{error, {client_after_tls_crash, term(), term(), term()}}` — unexpected crash; socket closed.\n"
      "\n"
      "Author: Lee Barney\n"
      "Version: 0.1\n"
@@ -205,34 +292,130 @@ after_tls(Sock, {M,F,A}, Args, Timeout) ->
      "- Time: O(n)\n"
      "- Space: O(n)\n"
      "\n"
-     "Last Modified: 2025-08-23\n".
+     "Last Modified: 2025-09-04\n".
 
--spec send_call_and_await(
+-spec after_tls(
+          call | cast,
+          ssl:sslsocket(),
+          {module(), atom(), non_neg_integer()},
+          [term()],
+          integer()
+      ) ->
+          term()
+        | {error, {peer_cert_error, term()}}
+        | {error, {protocol_error, term()}}
+        | {error, {recv_failed, term()}}
+        | {error, {client_after_tls_crash, term(), term(), term()}}.
+after_tls(CallType, Sock, {M,F,A}, Args, Timeout) ->
+    try
+        %% 1) Server certificate (diagnose here if it fails)
+        FP =
+            case ssl:peercert(Sock) of
+                {ok, CertDer}   -> semp_util:cert_fingerprint_sha512(CertDer);
+                {error, Reason} -> throw({peer_cert_error, Reason})
+            end,
+
+        %% 2) Token fast path
+        case token_for(FP) of
+            {ok, Token} ->
+		logger:info("trpc: sending cached token ~p~n",[Token]),
+                ok = semp_util:send_frame(Sock, term_to_binary(#{t => token_present, token => Token})),
+                send_and_maybe_wait(CallType, Sock, {M,F,A}, Args, Timeout);
+            error ->
+                %% 3) Expect TOKEN_ISSUE
+		logger:info("trpc: waiting for server token"),
+                case semp_util:recv_frame(Sock, Timeout) of
+                    {ok, Bin} ->
+			logger:info("received binary token from server."),
+                        case safe_term(Bin) of
+                            #{t := token_issue, token := Token} ->
+				logger:info("trpc: received safe server token ~p~n",[Token]),
+                                cache_token(FP, Token),
+                                send_and_maybe_wait(CallType, Sock, {M,F,A}, Args, Timeout);
+                            Other ->
+				logger:info("trpc: safe token failed with ~p~n",[Other]),
+                                throw({protocol_error, Other})
+                        end;
+                    {error, R} ->
+			logger:error("trpc: server provided token received is an unsafe term. ~p~n",[R]),
+                        throw({recv_failed, R})
+                end
+        end
+    catch
+        throw:Why -> {error, Why};
+        Class:Term:Stack ->
+            %% if anything crashes, don’t leave the TLS socket dangling
+            catch ssl:close(Sock),
+            {error, {client_after_tls_crash, Class, Term, Stack}}
+    end.
+
+-doc "Purpose:\n"
+     "Sends a remote request after TLS/token setup and, for CALL requests, waits for the result. "
+     "Constructs a request frame with a unique request id, transmits it, and for CALL expects a "
+     "RESULT frame; CAST returns immediately.\n"
+     "\n"
+     "Parameters:\n"
+     "- `CallType :: call | cast` — operation type controlling reply behavior.\n"
+     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
+     "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
+     "- `Args :: [term()]` — arguments list; its length must equal `A`.\n"
+     "- `Timeout :: integer()` — timeout in milliseconds for result reception (CALL only).\n"
+     "\n"
+     "Return Value:\n"
+     "- `{ok, term()}` — successful result value (CALL).\n"
+     "- `{ok, cast}` — acknowledgment that the cast was sent (CAST).\n"
+     "- `{error, protocol_error}` — malformed or unexpected response frame (CALL).\n"
+     "- `{error, closed}` — socket was closed by the peer before a result arrived (CALL).\n"
+     "- `{error, timeout}` — no response within the timeout (CALL).\n"
+     "- `Other :: term()` — any other error propagated unchanged from lower layers (CALL).\n"
+     "\n"
+     "Author: Lee Barney\n"
+     "Version: 0.1\n"
+     "\n"
+     "Complexity:\n"
+     "- Time: O(n)\n"
+     "- Space: O(n)\n"
+     "\n"
+     "Last Modified: 2025-09-04\n".
+
+-spec send_and_maybe_wait(
+          call | cast,
           ssl:sslsocket(),
           {module(), atom(), non_neg_integer()},
           [term()],
           integer()
       ) ->
           {ok, term()}
+        | {ok, cast}
         | {error, protocol_error}
         | {error, closed}
         | {error, timeout}
         | term().
-send_call_and_await(Sock, {M,F,A}, Args, Timeout) when length(Args) =:= A ->
+send_and_maybe_wait(CallType, Sock, {M,F,A}, Args, Timeout) when length(Args) =:= A ->
     ReqId = crypto:strong_rand_bytes(12),
-    Call = #{t => call, ver => 1, req_id => ReqId, m => M, f => F, a => A, args => Args, opts => #{timeout => Timeout}},
-    ok = semp_util:send_frame(Sock, term_to_binary(Call)),
-    %% Success: RESULT frame; else server closes silently.
-    case semp_util:recv_frame(Sock, Timeout) of
-        {ok, Bin} ->
-            case safe_term(Bin) of
-                #{t := result, req_id := ReqId, value := Val} -> {ok, Val};
-                _ -> {error, protocol_error}
-            end;
-        {error, closed} -> {error, closed};
-        {error, timeout} -> {error, timeout};
-        Other -> Other
-    end.
+    Request = #{t => CallType, ver => 1, req_id => ReqId, m => M, f => F, a => A, args => Args, opts => #{timeout => Timeout}},
+    logger:info("trpc: about to send request ~p~n",[Request]),
+    ok = semp_util:send_frame(Sock, term_to_binary(Request)),
+    case CallType of
+	    call ->
+    		%% Success: RESULT frame; else server closes silently.
+    		logger:info("trpc: waiting for result~n"),
+    		case semp_util:recv_frame(Sock, Timeout) of
+        		{ok, Bin} ->
+				logger:info("trpc: recieved result binary~n"),
+            			case safe_term(Bin) of
+                			#{t := result,  value := Val} -> 
+						logger:info("trpc: got result ~p~n",[Val]),
+						{ok, Val};
+                			_ -> {error, protocol_error}
+            			end;
+        		{error, closed} -> {error, closed};
+        		{error, timeout} -> {error, timeout};
+        	Other -> Other
+    		end;
+	    cast ->
+		{ok, cast}
+   end.
 
 
 
@@ -288,11 +471,13 @@ tls_client_opts(SNI) ->
     Base = [
         {versions, ['tlsv1.3']},
         {alpn_advertised_protocols, [<<"trust/1">>]},
-        {server_name_indication, SNI}
-    ],
-    %% Always strict verification:
-    Base ++ [{verify, verify_peer}].
-
+        %% Always strict verification:
+	{verify, verify_peer}
+    ] ++ case SNI of 
+		 undefined -> []; 
+		 Host -> [{server_name_indication, Host}] 
+	 end,
+    Base ++ application:get_env(trust, client_tls_opts, []).
 
 -doc "Purpose:\n"
      "Ensures that the ETS cache table exists. Creates the table if it is undefined; "
@@ -347,11 +532,7 @@ ensure_cache() ->
 -spec cache_token(binary(), binary()) -> ok.
 cache_token(FP, Token) ->
     ensure_cache(),
-    case semp_token:peek(Token) of
-        {ok, #{exp := Exp, kid := Kid}} -> ets:insert(?CACHE, {FP, Token, Exp, Kid});
-        _ -> ok
-    end, 
-    ok.
+    ets:insert(?CACHE, {FP, Token}).
 
 
 -doc "Purpose:\n"
@@ -378,253 +559,9 @@ cache_token(FP, Token) ->
 token_for(FP) ->
     ensure_cache(),
     case ets:lookup(?CACHE, FP) of
-        [{_, Token, Exp, _Kid}] ->
-            Now = os:system_time(second),
-            if
-                Exp > Now -> {ok, Token};
-                true ->
-                    ets:delete(?CACHE, FP),
-                    error
-            end;
-        [] -> error
+        [{Token}] -> Token;
+        [] -> error;
+	FailReason -> logger:error("trpc: token search failure reason ~p~n",[FailReason]),
+		      error
     end.
 
-
-
-
-%% --- CAST (fire-and-forget) --------------------------------------------------
-
-
-
--doc "Purpose:\n"
-     "Resolves the target host or IP and performs a fire-and-forget remote call over TLS by "
-     "trying each resolved endpoint with the provided MFA and arguments, honoring the configured timeout.\n"
-     "\n"
-     "Parameters:\n"
-     "- `HostOrIP :: string() | inet:ip_address()` — destination hostname or IP.\n"
-     "- `Port :: integer()` — destination port.\n"
-     "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
-     "- `Args :: [term()]` — arguments payload to include in the cast.\n"
-     "- `Opts :: map()` — options map.\n"
-     "  - `timeout :: integer()` — optional, in milliseconds (default: `?DEFAULT_TIMEOUT`).\n"
-     "\n"
-     "Return Value:\n"
-     "- `Result :: term()` — success value returned by try_endpoints_cast/5.\n"
-     "- `{:error, nxdomain}` — hostname could not be resolved.\n"
-     "- `{:error, connect_failed}` — all endpoints failed to establish a TLS connection.\n"
-     "- `OtherError :: term()` — any other error propagated unchanged from try_endpoints_cast/5.\n"
-     "\n"
-     "Author: Lee Barney\n"
-     "Version: 0.1\n"
-     "\n"
-     "Complexity:\n"
-     "- Time: Best O(1), Worst O(n)\n"
-     "- Space: O(1)\n"
-     "\n"
-     "Last Modified: 2025-08-23\n".
-
--spec cast(
-          string() | inet:ip_address(),
-          integer(),
-          {module(), atom(), non_neg_integer()},
-          [term()],
-          map()
-      ) ->
-          term()
-        | {error, nxdomain}
-        | {error, connect_failed}.
-cast(HostOrIP, Port, {M,F,A}, Args, Opts) when is_integer(Port) ->
-    Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
-    case semp_dns:resolve(HostOrIP) of
-        {ok, IPs} -> try_endpoints_cast(IPs, Port, {M,F,A}, Args, Timeout);
-        {error, _}=E -> E
-    end.
-
-
-
--doc "Purpose:\n"
-     "Wrapper for cast/5 that accepts an extra TLS permissiveness argument but ignores it, "
-     "delegating directly to cast/5.\n"
-     "\n"
-     "Parameters:\n"
-     "- `HostOrIP :: string() | inet:ip_address()` — destination hostname or IP.\n"
-     "- `Port :: integer()` — destination port.\n"
-     "- `MFA :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
-     "- `Args :: [term()]` — arguments payload to include in the cast.\n"
-     "- `Opts :: map()` — options map.\n"
-     "- `_PermissiveTLS :: term()` — ignored argument.\n"
-     "\n"
-     "Return Value:\n"
-     "- `Result :: term()` — value returned by cast/5.\n"
-     "\n"
-     "Author: Lee Barney\n"
-     "Version: 0.1\n"
-     "\n"
-     "Complexity:\n"
-     "- Time: O(1)\n"
-     "- Space: O(1)\n"
-     "\n"
-     "Last Modified: 2025-08-23\n".
-
--spec cast(
-          string() | inet:ip_address(),
-          integer(),
-          {module(), atom(), non_neg_integer()},
-          [term()],
-          map(),
-          term()
-      ) -> term().
-cast(HostOrIP, Port, MFA, Args, Opts, _PermissiveTLS) ->
-    cast(HostOrIP, Port, MFA, Args, Opts).
-
-
-
-
--doc "Purpose:\n"
-     "Attempts to send a fire-and-forget remote call by iterating through a list of candidate "
-     "IP addresses until one TLS connection succeeds or all fail. On success, delegates to "
-     "after_tls_cast/4 and returns its result.\n"
-     "\n"
-     "Parameters:\n"
-     "- `IPs :: [inet:ip_address() | string()]` — ordered list of destination addresses to try.\n"
-     "- `Port :: integer()` — destination port.\n"
-     "- `MFA :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
-     "- `Args :: [term()]` — arguments payload for the remote cast.\n"
-     "- `Timeout :: integer()` — timeout in milliseconds for connection and cast operations.\n"
-     "\n"
-     "Return Value:\n"
-     "- `Result :: term()` — success value returned by after_tls_cast/4.\n"
-     "- `{:error, connect_failed}` — no connection could be established with any IP.\n"
-     "- `ErrorFromAfterTLSCast :: term()` — any error returned by after_tls_cast/4 is propagated unchanged.\n"
-     "\n"
-     "Author: Lee Barney\n"
-     "Version: 0.1\n"
-     "\n"
-     "Complexity:\n"
-     "- Time: Best O(1), Worst O(n)\n"
-     "- Space: O(1)\n"
-     "\n"
-     "Last Modified: 2025-08-23\n".
-
--spec try_endpoints_cast(
-          [inet:ip_address() | string()],
-          integer(),
-          {module(), atom(), non_neg_integer()},
-          [term()],
-          integer()
-      ) ->
-          term()
-        | {error, connect_failed}.
-try_endpoints_cast([], _Port, _MFA, _Args, _Tmo) ->
-    {error, connect_failed};
-try_endpoints_cast([IP | Rest], Port, MFA, Args, Timeout) ->
-    TlsOpts = tls_client_opts(host_to_sni(IP)),
-    case ssl:connect(IP, Port, TlsOpts, Timeout) of
-        {ok, Sock} ->
-            Res = after_tls_cast(Sock, MFA, Args, Timeout),
-            ssl:close(Sock),
-            Res;
-        {error, _} ->
-            try_endpoints_cast(Rest, Port, MFA, Args, Timeout)
-    end.
-
-
-
-
--doc "Purpose:\n"
-     "Performs client-side post-handshake processing for a fire-and-forget call: validates the "
-     "server certificate, uses a cached token if available or receives a token issuance, and "
-     "then sends the cast without awaiting a result.\n"
-     "\n"
-     "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
-     "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
-     "- `Args :: [term()]` — arguments payload for the remote cast.\n"
-     "- `Timeout :: integer()` — timeout in milliseconds for any required receive during token flow.\n"
-     "\n"
-     "Return Value:\n"
-     "- `ok` — cast was sent successfully.\n"
-     "- `{:error, protocol_error}` — invalid or unexpected protocol frame received.\n"
-     "- `{:error, timeout}` — timed out waiting for a required frame.\n"
-     "- `{:error, tls_error}` — TLS-level failure (e.g., missing/invalid peer certificate).\n"
-     "- `OtherError :: term()` — any other error propagated unchanged from lower layers.\n"
-     "\n"
-     "Author: Lee Barney\n"
-     "Version: 0.1\n"
-     "\n"
-     "Complexity:\n"
-     "- Time: O(n)\n"
-     "- Space: O(1)\n"
-     "\n"
-     "Last Modified: 2025-08-23\n".
-
--spec after_tls_cast(
-          ssl:sslsocket(),
-          {module(), atom(), non_neg_integer()},
-          [term()],
-          integer()
-      ) ->
-          ok
-        | {error, protocol_error}
-        | {error, timeout}
-        | {error, tls_error}
-        | term().
-after_tls_cast(Sock, {M,F,A}, Args, Timeout) ->
-    case ssl:peercert(Sock) of
-        {ok, CertBin} ->
-            FP = semp_util:cert_fingerprint_sha512(CertBin),
-            case token_for(FP) of
-                {ok, Token} ->
-                    ok = semp_util:send_frame(Sock, term_to_binary(#{t => token_present, token => Token})),
-                    send_cast(Sock, {M,F,A}, Args);
-                error ->
-                    case semp_util:recv_frame(Sock, Timeout) of
-                        {ok, Bin} ->
-                            case safe_term(Bin) of
-                                #{t := token_issue, token := Token} ->
-                                    cache_token(FP, Token),
-                                    send_cast(Sock, {M,F,A}, Args);
-                                _ ->
-                                    {error, protocol_error}
-                            end;
-                        E -> E
-                    end
-            end;
-        _ ->
-            {error, tls_error}
-    end.
-
-
-
-
--doc "Purpose:\n"
-     "Sends a fire-and-forget remote call frame over an established TLS socket. The frame "
-     "contains the target MFA and arguments but does not expect a reply.\n"
-     "\n"
-     "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
-     "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
-     "- `Args :: [term()]` — argument list; its length must equal `A`.\n"
-     "\n"
-     "Return Value:\n"
-     "- `ok` — frame successfully sent.\n"
-     "- `{:error, term()}` — an error occurred while sending the frame.\n"
-     "\n"
-     "Author: Lee Barney\n"
-     "Version: 0.1\n"
-     "\n"
-     "Complexity:\n"
-     "- Time: O(n)\n"
-     "- Space: O(n)\n"
-     "\n"
-     "Last Modified: 2025-08-23\n".
-
--spec send_cast(
-          ssl:sslsocket(),
-          {module(), atom(), non_neg_integer()},
-          [term()]
-      ) -> ok | {error, term()}.
-send_cast(Sock, {M,F,A}, Args) when length(Args) =:= A ->
-    Frame = #{t => cast, ver => 1, m => M, f => F, a => A, args => Args, opts => #{}},
-    semp_util:send_frame(Sock, term_to_binary(Frame)),
-    ok.

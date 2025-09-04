@@ -1,12 +1,14 @@
 -module(trust_suspicion).
 
 -export([
+    ensure/0,
+    seed_from_whitelist/1,
     writePeer/1,
     bump/2, 
     is_trusted/1
 ]).
 
--define(TAB, trust_permissions).
+-define(TAB, trust_suspicions).
 
 ensure() ->
     case ets:info(?TAB) of
@@ -23,6 +25,29 @@ ensure() ->
         _ ->
             ok
     end.
+
+%% Clobber suspicion table and seed from WTab (an ETS table name or tid)
+seed_from_whitelist(WTab) ->
+    ensure(),
+    case ets:info(WTab) of
+        undefined ->
+            {error, whitelist_not_loaded};
+        _ ->
+            %% 1) Clear suspicion table
+            ets:delete_all_objects(?TAB),
+            %% 2) Stream all keys from whitelist: entries are {FP, Spec}
+            MS = [{{'$1','_'}, [], ['$1']}],
+            seed_stream(ets:select(WTab, MS, 512), 0)
+    end.
+
+%% Handle the streaming result from ets:select/3
+seed_stream('$end_of_table', Acc) ->
+    {ok, Acc};
+seed_stream({Keys, Cont}, Acc) ->
+    %% Insert {FP,0} for each key chunk
+    ets:insert(?TAB, [{K, 0} || K <- Keys]),
+    %% IMPORTANT: continue with ets:select/1 on the continuation
+    seed_stream(ets:select(Cont), Acc + length(Keys)).
 
 
 writePeer(FP) ->
@@ -64,6 +89,8 @@ bump(FP, Direction) ->
 is_trusted(FP) ->
     ensure(),
     case ets:lookup(?TAB, FP) of
-        []        -> false;
+        []        -> 
+		    logger:warning("trust_suspicion: unable to find fp: ~p~nin table: ~p~n",[FP,?TAB]),
+		    false;
         [{_, Val}] -> Val =/= quarantined
     end.

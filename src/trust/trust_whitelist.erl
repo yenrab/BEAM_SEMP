@@ -1,7 +1,7 @@
 %% src/trust_whitelist.erl
 -module(trust_whitelist).
 
--export([ensure/0, is_allowed/1, reload/0]).
+-export([ensure/0,table/0,whitelist_path/0, is_allowed/1, reload/0]).
 
 -define(TAB, trust_whitelist).
 -define(WHITELIST_FILE, "whitelist.config").
@@ -33,10 +33,15 @@ ensure() ->
     case ets:info(?TAB) of
         undefined ->
             _ = ets:new(?TAB, [named_table, set, protected, {read_concurrency, true}]),
-            load_from_priv();
+            load_from_priv(),
+	    logger:info("trust_whitelist: loaded list from priv/whitelist.config");
         _ ->
-            ok
-    end.
+           ok 
+    end,
+    ?TAB.
+
+table()->
+	?TAB.
 
 
 
@@ -64,11 +69,7 @@ ensure() ->
 -spec is_allowed(binary()) -> boolean().
 is_allowed(FP) when is_binary(FP) ->
     ensure(),
-    case ets:lookup(?TAB, FP) of
-        [{_, _Spec}] -> true;
-        _ -> false
-    end.
-
+    ets:member(?TAB, FP).  %% RAW binary key
 
 -doc "Purpose:\n"
      "Reloads the whitelist ETS table. Ensures the table exists, removes all current entries, "
@@ -91,9 +92,11 @@ is_allowed(FP) when is_binary(FP) ->
 
 -spec reload() -> term().
 reload() ->
-    ensure(),
-    ets:delete_all_objects(?TAB),
-    load_from_priv().
+    try ets:delete(?TAB)
+    catch
+        _ -> ok   % table didn't exist (or wasn't yours)
+    end,
+    ensure().
 
 %% --- helper functions  ------------------------------
 -doc "Purpose:\n"
@@ -169,7 +172,7 @@ load_from_priv() ->
 maybe_autoload_from_certs() ->
     case application:get_env(semp, whitelist_autoload, false) of
         true ->
-            DefaultAuthorization = application:get_env(semp, whitelist_default_spec, []),
+            DefaultAuthorization = application:get_env(trust, whitelist_default_spec, []),
             case normalize_value(DefaultAuthorization) of
                 invalid ->
                     logger:warning("whitelist: invalid default authorization ~p; autoload skipped", [DefaultAuthorization]),
@@ -221,15 +224,29 @@ list_cert_files(Dir) ->
      "- Time: O(1)\n"
      "- Space: O(1)\n"
      "\n"
-     "Last Modified: 2025-08-23\n".
+     "Last Modified: 2025-09-01\n".
 
 -spec whitelist_path() -> string() | fail.
 whitelist_path() ->
-    case code:priv_dir(semp) of
-        Dir when is_list(Dir) -> filename:join(Dir, ?WHITELIST_FILE);
-        {error, _}            -> fail 
+    case priv_app() of
+        fail -> 
+		    logger:warning("trust_whitelist: unable to find app's priv dir"),
+		    fail;
+        App  ->
+            case code:priv_dir(App) of
+                Dir when is_list(Dir) -> filename:join(Dir, "whitelist.config");
+                {error, _}            -> 
+			    logger:warning("trust_whitelist: unable to find priv dir. Is it set in sys.config?"),
+			    fail
+            end
     end.
 
+%% Resolve the host application's priv/ (mandatory)
+priv_app() ->
+    case application:get_env(beam_semp, host_app) of
+        {ok, App} when is_atom(App) -> App;
+        _ -> fail
+    end.
 -doc "Purpose:\n"
      "Loads whitelist specifications from a map into the ETS table. Iterates over all "
      "entries and inserts each fingerprint specification.\n"
@@ -284,8 +301,11 @@ insert_entry(FileName, Val0, Acc) ->
     case read_cert_fp(CertPath) of
         {ok, FP} ->
             case normalize_value(Val0) of
-                invalid -> Acc;
-                Spec    -> ets:insert(?TAB, {FP, Spec}), Acc
+                invalid -> logger:warning("whitelist: invalid spec for ~ts",[FileName]),
+			   Acc;
+                Spec    -> ets:insert(?TAB, {FP, Spec}), 
+			   logger:info("whitelist: added ~ts -> ~p",[FileName, Spec]),
+			   Acc
             end;
         {error, Reason} ->
             logger:warning("whitelist: skipping ~ts (~p)", [CertPath, Reason]),
@@ -293,18 +313,16 @@ insert_entry(FileName, Val0, Acc) ->
     end.
 
 
-
 -doc "Purpose:\n"
-     "Builds the filesystem path to a certificate file located in the application's priv directory. "
-     "Accepts the filename as a binary, list, or atom and normalizes it to a string. If the priv "
-     "directory cannot be resolved, returns `fail`.\n"
+     "Builds the full filesystem path to a certificate file located in the application's priv/certs directory. "
+     "If no valid priv directory can be resolved, returns `fail`.\n"
      "\n"
      "Parameters:\n"
-     "- `FileName :: binary() | string() | atom()` — the certificate file name.\n"
+     "- `FileName :: string()` — the certificate file name.\n"
      "\n"
      "Return Value:\n"
-     "- `Path :: string()` — the resolved certificate path.\n"
-     "- `fail` — if the priv directory is unavailable.\n"
+     "- `Path :: string()` — the resolved path to the certificate file.\n"
+     "- `fail` — if no valid application priv directory is available.\n"
      "\n"
      "Author: Lee Barney\n"
      "Version: 0.1\n"
@@ -313,31 +331,29 @@ insert_entry(FileName, Val0, Acc) ->
      "- Time: O(1)\n"
      "- Space: O(1)\n"
      "\n"
-     "Last Modified: 2025-08-23\n".
+     "Last Modified: 2025-09-01\n".
 
--spec cert_path(binary() | string() | atom()) -> string() | fail.
+-spec cert_path(string()) -> string() | fail.
 cert_path(FileName) ->
-    Name =
-        case FileName of
-            B when is_binary(B) -> binary_to_list(B);
-            L when is_list(L)   -> L;
-            A when is_atom(A)   -> atom_to_list(A)
-        end,
-    case code:priv_dir(semp) of
-        Dir when is_list(Dir) -> filename:join([Dir, ?CERTS_DIR, Name]);
-        {error, _}            -> fail
+    case priv_app() of
+        fail -> fail;
+        App  ->
+            case code:priv_dir(App) of
+                Dir when is_list(Dir) -> filename:join([Dir, "certs", FileName]);
+                {error, _}            -> fail
+            end
     end.
-
 -doc "Purpose:\n"
-     "Reads a certificate file and extracts its SHA-512 SPKI fingerprint. Supports both PEM-encoded "
-     "and raw DER-encoded certificates.\n"
+     "Reads a certificate file and extracts its SHA-512 fingerprint. Only PEM-encoded\n"
+     "certificates are supported. If no certificate entry is found, returns an error.\n"
      "\n"
      "Parameters:\n"
      "- `Path :: string()` — the filesystem path to the certificate file.\n"
      "\n"
      "Return Value:\n"
-     "- `{ok, FP :: binary()}` — the computed SPKI fingerprint of the certificate.\n"
-     "- `{error, Reason :: term()}` — if the file could not be read or parsed.\n"
+     "- `{ok, FP :: binary()}` — the computed certificate fingerprint.\n"
+     "- `{error, no_certificate}` — no certificate was found in the file.\n"
+     "- `{error, term()}` — if the file could not be read.\n"
      "\n"
      "Author: Lee Barney\n"
      "Version: 0.1\n"
@@ -346,24 +362,20 @@ cert_path(FileName) ->
      "- Time: O(n)\n"
      "- Space: O(n)\n"
      "\n"
-     "Last Modified: 2025-08-23\n".
+     "Last Modified: 2025-09-01\n".
 
--spec read_cert_fp(string()) -> {ok, binary()} | {error, term()}.
+-spec read_cert_fp(string()) -> {ok, binary()} | {error, no_certificate} | {error, term()}.
 read_cert_fp(Path) ->
     case file:read_file(Path) of
         {ok, Bin} ->
-            Dec = public_key:pem_decode(Bin),
-            case lists:dropwhile(fun({T,_,_}) -> T =/= 'Certificate' end, Dec) of
+            case public_key:pem_decode(Bin) of
                 [{'Certificate', Der, _} | _] ->
-                    {ok, semp_util:spki_fingerprint_sha512(Der)};
+                    {ok, semp_util:cert_fingerprint_sha512(Der)}; 
                 [] ->
-                    %% maybe raw DER:
-                    {ok, semp_util:spki_fingerprint_sha512(Bin)}
+                    {error, no_certificate}
             end;
-        {error, Reason} ->
-            {error, Reason}
+        Error -> Error
     end.
-
 
 
 -doc "Purpose:\n"
