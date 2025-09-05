@@ -68,7 +68,7 @@
         | {error, term()}.
 cast(HostOrIP, Port, {M,F,A}, Args, Opts) when is_integer(Port) ->
     Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
-    logger:info("trpc: Casting (~p, ~p) to ~p on port ~p with args ~p.~n",[{M,F,A},Args,HostOrIP,Port,Opts]),
+    logger:debug("trpc: Casting (~p, ~p) to ~p on port ~p with args ~p.~n",[{M,F,A},Args,HostOrIP,Port,Opts]),
     case semp_dns:resolve(HostOrIP) of
         {ok, IPs} -> try_endpoints(cast, IPs, Port, {M,F,A}, Args, Timeout);
         {error, _}=E -> E
@@ -223,16 +223,16 @@ call(HostOrIP, Port, MFA, Args) ->
 try_endpoints(_CallType, [], _Port, _MFA, _Args, _Tmo) -> {error, connect_failed};
 try_endpoints(CallType, [IP|Rest], Port, MFA, Args, Timeout) ->
     TlsOpts = tls_client_opts(host_to_sni(IP)),
-    logger:info("try_endpoints: about to connect IP: ~p~n",[IP]),
+    logger:debug("try_endpoints: about to connect IP: ~p~n",[IP]),
     case ssl:connect(IP, Port, TlsOpts, Timeout) of
         {ok, Sock} ->
-		    logger:info("ssl:connect got socket: ~p~n",[Sock]),
+		    logger:debug("ssl:connect got socket: ~p~n",[Sock]),
 		    ok = ssl:setopts(Sock, [{active, false}, {mode, binary}]),
             Res = after_tls(CallType, Sock, MFA, Args, Timeout),
             ssl:close(Sock),
             Res;
         {error, Reason} ->
-		    logger:info("connect to ~p:~p failed: ~p~nTrying next IP ~p~n", [IP, Port, Reason,Rest]),
+		    logger:debug("connect to ~p:~p failed: ~p~nTrying next IP ~p~n", [IP, Port, Reason,Rest]),
 	    try_endpoints(CallType,Rest, Port, MFA, Args, Timeout)
     end.
 
@@ -318,22 +318,22 @@ after_tls(CallType, Sock, {M,F,A}, Args, Timeout) ->
         %% 2) Token fast path
         case token_for(FP) of
             {ok, Token} ->
-		logger:info("trpc: sending cached token ~p~n",[Token]),
+		logger:debug("trpc: sending cached token ~p~n",[Token]),
                 ok = semp_util:send_frame(Sock, term_to_binary(#{t => token_present, token => Token})),
                 send_and_maybe_wait(CallType, Sock, {M,F,A}, Args, Timeout);
             error ->
                 %% 3) Expect TOKEN_ISSUE
-		logger:info("trpc: waiting for server token"),
+		logger:debug("trpc: waiting for server token"),
                 case semp_util:recv_frame(Sock, Timeout) of
                     {ok, Bin} ->
-			logger:info("received binary token from server."),
+			logger:debug("received binary token from server."),
                         case safe_term(Bin) of
                             #{t := token_issue, token := Token} ->
-				logger:info("trpc: received safe server token ~p~n",[Token]),
+				logger:debug("trpc: received safe server token ~p~n",[Token]),
                                 cache_token(FP, Token),
                                 send_and_maybe_wait(CallType, Sock, {M,F,A}, Args, Timeout);
                             Other ->
-				logger:info("trpc: safe token failed with ~p~n",[Other]),
+				logger:debug("trpc: safe token failed with ~p~n",[Other]),
                                 throw({protocol_error, Other})
                         end;
                     {error, R} ->
@@ -394,18 +394,18 @@ after_tls(CallType, Sock, {M,F,A}, Args, Timeout) ->
 send_and_maybe_wait(CallType, Sock, {M,F,A}, Args, Timeout) when length(Args) =:= A ->
     ReqId = crypto:strong_rand_bytes(12),
     Request = #{t => CallType, ver => 1, req_id => ReqId, m => M, f => F, a => A, args => Args, opts => #{timeout => Timeout}},
-    logger:info("trpc: about to send request ~p~n",[Request]),
+    logger:debug("trpc: about to send request ~p~n",[Request]),
     ok = semp_util:send_frame(Sock, term_to_binary(Request)),
     case CallType of
 	    call ->
     		%% Success: RESULT frame; else server closes silently.
-    		logger:info("trpc: waiting for result~n"),
+    		logger:debug("trpc: waiting for result~n"),
     		case semp_util:recv_frame(Sock, Timeout) of
         		{ok, Bin} ->
-				logger:info("trpc: recieved result binary~n"),
+				logger:debug("trpc: recieved result binary~n"),
             			case safe_term(Bin) of
                 			#{t := result,  value := Val} -> 
-						logger:info("trpc: got result ~p~n",[Val]),
+						logger:debug("trpc: got result ~p~n",[Val]),
 						{ok, Val};
                 			_ -> {error, protocol_error}
             			end;
@@ -561,7 +561,7 @@ token_for(FP) ->
     case ets:lookup(?CACHE, FP) of
         [{Token}] -> Token;
         [] -> error;
-	FailReason -> logger:error("trpc: token search failure reason ~p~n",[FailReason]),
+	FailReason -> logger:debug("trpc: failed to find token for ~p. reason: ~p~n",[FP,FailReason]),
 		      error
     end.
 

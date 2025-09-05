@@ -34,7 +34,7 @@ ensure() ->
         undefined ->
             _ = ets:new(?TAB, [named_table, set, protected, {read_concurrency, true}]),
             load_from_priv(),
-	    logger:info("trust_whitelist: loaded list from priv/whitelist.config");
+	    logger:debug("trust_whitelist: loaded list from priv/whitelist.config");
         _ ->
            ok 
     end,
@@ -130,7 +130,7 @@ load_from_priv() ->
     case whitelist_path() of
         fail ->
 	    %% No priv dir available -> behave as independent node (reject all).
-            logger:warning("whitelist.config not found. Running as independent node."),
+            logger:warning("whitelist.config not found. Running as independent/client node."),
             ok;
         Path ->
             case file:consult(Path) of
@@ -304,7 +304,7 @@ insert_entry(FileName, Val0, Acc) ->
                 invalid -> logger:warning("whitelist: invalid spec for ~ts",[FileName]),
 			   Acc;
                 Spec    -> ets:insert(?TAB, {FP, Spec}), 
-			   logger:info("whitelist: added ~ts -> ~p",[FileName, Spec]),
+			   logger:debug("whitelist: added ~ts -> ~p",[FileName, Spec]),
 			   Acc
             end;
         {error, Reason} ->

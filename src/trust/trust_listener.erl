@@ -178,7 +178,7 @@ tls_server_opts() ->
 handle_cast(accept, #{lsock := LS, conns := Conns0} = St0) ->
     case ssl:transport_accept(LS, infinity) of
         {ok, Sock} ->
-	    logger:info("trust_listener: transport accepted on ~p~n",[LS]),
+	    logger:debug("trust_listener: transport accepted on ~p~n",[LS]),
             %% spawn a runner that *waits* for the socket
             {Pid, MRef} = spawn_monitor(fun() ->
                 receive

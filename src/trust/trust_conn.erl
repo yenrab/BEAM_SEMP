@@ -46,7 +46,7 @@
 -spec start(ssl:sslsocket()) -> term() | ok.
 start(Sock) ->
     process_flag(trap_exit, true),
-    logger:info("trust_conn: starting TLS handshake on ~p.~n",[Sock]),
+    logger:debug("trust_conn: starting TLS handshake on ~p.~n",[Sock]),
     HandshakeTimeOut = application:get_env(trust, client_handshake_timeout, 5000),
     Ssl = case ssl:handshake(Sock, HandshakeTimeOut) of
         ok                -> Sock;
@@ -54,18 +54,18 @@ start(Sock) ->
         {error, Reason}   -> ssl:close(Sock), 
 			     exit({tls_handshake_failed, Reason})
     end,
-    logger:info("trust_conn: ssl handshake complete"),
+    logger:debug("trust_conn: ssl handshake complete"),
     %% enforce ALPN selection
     case ssl:negotiated_protocol(Ssl) of
         {ok, <<"trust/1">>} -> ok;
         {ok, Other}         -> 
-		    logger:info("trust_conn: alpn missmatch ~p.~n",[Other]),
+		    logger:debug("trust_conn: alpn missmatch ~p.~n",[Other]),
 		    ssl:close(Ssl), exit({alpn_mismatch, Other});
         {error, R}          -> 
-		    logger:info("trust_con: alpn error: ~p~n",[R]),
+		    logger:debug("trust_con: alpn error: ~p~n",[R]),
 		    ssl:close(Sock), exit({alpn_missing, R})
     end,
-    logger:info("trust_conn: ALPN passed"),
+    logger:debug("trust_conn: ALPN passed"),
     ssl:setopts(Ssl, [{active, false}, {mode, binary}]),
     %% proceed: peercert -> fingerprint -> whitelist -> token/CALL -> close, etc.
     after_tls(Ssl).
@@ -103,15 +103,15 @@ after_tls(Sock) ->
     case ssl:peercert(Sock) of
         {ok, CertDer} ->
             FP = semp_util:cert_fingerprint_sha512(CertDer),
-	    logger:info("trust_conn: generated from certDer, fp=~p", [FP]),
+	    logger:debug("trust_conn: generated from certDer, fp=~p", [FP]),
             %% Gate 1: whitelist
             case trust_whitelist:is_allowed(FP) of
                 true ->
-		    logger:info("trust_conn: remote is allowed fp=~p",[FP]),
+		    logger:debug("trust_conn: remote is allowed fp=~p",[FP]),
                     %% Gate 2: suspicion/quarantine (no response to client on fail)
                     case trust_suspicion:is_trusted(FP) of
                         true  ->
-			    logger:info("trust_conn: fp: ~p~n is trusted",[FP]),
+			    logger:debug("trust_conn: fp: ~p~n is trusted",[FP]),
                             %% Proceed to your token/CALL path
                             maybe_recv_token_or_issue(Sock, FP);
                         false ->
@@ -170,7 +170,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
                 #{t := token_present, token := T} ->
                     case trust_token:validate(T, FP) of
                         ok ->
-			    logger:info("trust_token: presented token is valid ~p~n",[T]),
+			    logger:debug("trust_token: presented token is valid ~p~n",[T]),
                             %% Fast path: token good; proceed straight to CALL.
                             await_request_and_execute(Sock, FP);
                         {error, Why} ->
@@ -190,7 +190,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
 
         {error, timeout} ->
             %% No token presented: treat as first-time client → issue token then await CALL
-	    logger:info("trust_conn: no client token presented for ~p~n",[FP]),
+	    logger:debug("trust_conn: no client token presented for ~p~n",[FP]),
             trust_token:issue(FP),
 	    GeneratedToken=case trust_token:token_for(FP) of
 		    error -> 
@@ -198,9 +198,9 @@ maybe_recv_token_or_issue(Sock, FP) ->
 			    exit(token_error);
 		    Token ->Token
 	    end,
-	    logger:info("trust_conn: generated token. FP=~p Token: ~p~n",[FP,GeneratedToken]),
+	    logger:debug("trust_conn: generated token. FP=~p Token: ~p~n",[FP,GeneratedToken]),
             ok = semp_util:send_frame(Sock, term_to_binary(#{t => token_issue, token => GeneratedToken})),
-	    logger:info("trust_conn: generated token sent. Awaiting request~n"),
+	    logger:debug("trust_conn: generated token sent. Awaiting request~n"),
             await_request_and_execute(Sock, FP);
 
         {error, closed} ->
@@ -242,22 +242,21 @@ maybe_recv_token_or_issue(Sock, FP) ->
 -spec await_request_and_execute(ssl:sslsocket(), binary()) -> term() | no_return().
 await_request_and_execute(Sock, FP) ->
     CallTmo = application:get_env(trust, call_timeout_ms, 5000),
-    logger:info("trust_conn: waiting for request frame"),
+    logger:debug("trust_conn: waiting for request frame"),
     case semp_util:recv_frame(Sock, CallTmo) of
         {ok, Bin} ->
             case safe_term(Bin) of
                 %% CALL with req_id (required)
-                #{t := call, req_id := ReqId, m := M, f := F, a := A, args := Args} = Map
-                    when is_atom(M), is_atom(F), is_integer(A), is_list(Args) ->
-                    logger:info("trust_conn: got call request ~p~n",[ReqId]),
+                #{t := call, req_id := ReqId, m := M, f := F, a := A, args := Args} = Map ->
+                    logger:debug("trust_conn: got call request ~p~n",[ReqId]),
 		    Opts = maps:get(opts, Map, #{}),
-                    logger:info("trust_conn got call request ~p, (~p, ~p), with options: ~p~n",[ReqId, {M,F,A}, Args, Opts]),
+                    logger:debug("trust_conn got call request ~p, (~p, ~p), with options: ~p~n",[ReqId, {M,F,A}, Args, Opts]),
 		    handle_mfa(Sock, FP, call, M, F, A, Args, ReqId);
 
                 %% CAST with req_id (required)
                 #{t := cast, req_id := ReqId, m := M, f := F, a := A, args := Args}
                     when is_atom(M), is_atom(F), is_integer(A), is_list(Args) ->
-		    logger:info("trust_conn: got cast request ~p~n",[ReqId]),
+		    logger:debug("trust_conn: got cast request ~p~n",[ReqId]),
                     handle_mfa(Sock, FP, cast, M, F, A, Args, ReqId);
 
                 %% Anything else is a protocol violation 
@@ -266,9 +265,9 @@ await_request_and_execute(Sock, FP) ->
                     bump_up_maybe_quarantine_close(Sock, FP, protocol_error)
             end;
 
-        {error, timeout} -> logger:info("trust_conn: remote request timed out"),
+        {error, timeout} -> logger:debug("trust_conn: remote request timed out"),
 			    ssl:close(Sock), exit(call_timeout);
-        {error, closed}  -> logger:info("trust_con: remote socket closed"),
+        {error, closed}  -> logger:debug("trust_con: remote socket closed"),
 			    exit(peer_closed);
         {error, E}       ->
             logger:warning("recv_failed ~p (~p)", [FP, E]),
@@ -317,7 +316,7 @@ await_request_and_execute(Sock, FP) ->
           term()
       ) -> ok | no_return().
 handle_mfa(Sock, FP, Type, M, F, A, Args, ReqId) ->
-    logger:info("handlng MFA type ~p for id ~p~n",[Type,ReqId]),
+    logger:debug("handlng MFA type ~p for id ~p~n",[Type,ReqId]),
     ArityOk  = (length(Args) =:= A),
     Forbidden = semp_policy:is_forbidden(M, F, A),
     Permitted = perm_ok(FP, {M, F, A}),
@@ -333,7 +332,7 @@ handle_mfa(Sock, FP, Type, M, F, A, Args, ReqId) ->
                                    Sock, term_to_binary(#{t => result, value => Ret})),
                             ssl:close(Sock), ok;
                         cast ->
-				    io:format("cast close~n"),
+			    logger:debug("trust_conn: closing cast.~n"),
                             %% No reply on cast (success)
                             ssl:close(Sock), ok
                     end

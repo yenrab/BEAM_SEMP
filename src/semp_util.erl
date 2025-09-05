@@ -26,7 +26,7 @@ send_frame(Sock, Payload) when is_binary(Payload) ->
     ok = ssl:send(Sock, <<Len:32/unsigned-big>>),
     case ssl:send(Sock, Payload) of
 	    ok-> ok;
-	    FailureReason -> logger:info("Failed to send payload ~p~non socket ~p.~n Cause ~p~n",[Payload,Sock,FailureReason]),
+	    FailureReason -> logger:debug("Failed to send payload ~p~non socket ~p.~n Cause ~p~n",[Payload,Sock,FailureReason]),
 			     fail
     end.
 
