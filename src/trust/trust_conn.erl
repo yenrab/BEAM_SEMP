@@ -105,7 +105,7 @@ after_tls(Sock) ->
             FP = semp_util:cert_fingerprint_sha512(CertDer),
 	    logger:debug("trust_conn: generated from certDer, fp=~p", [FP]),
             %% Gate 1: whitelist
-            case trust_whitelist:is_allowed(FP) of
+            case semp_whitelist:is_allowed(trust, FP) of
                 true ->
 		    logger:debug("trust_conn: remote is allowed fp=~p",[FP]),
                     %% Gate 2: suspicion/quarantine (no response to client on fail)
@@ -123,7 +123,7 @@ after_tls(Sock) ->
 
                 false ->
                     %% Not whitelisted: close silently
-		    logger:warning("conn: whitelist_reject"),
+		    logger:warning("trust_conn: whitelist_reject"),
                     ssl:close(Sock), exit(whitelist_reject)
             end;
 
@@ -453,7 +453,7 @@ send_error_frame(Sock, Class, Reason) ->
 
 -spec perm_ok(binary(), {module(), atom(), integer()}) -> boolean().
 perm_ok(FP, {M,F,A}) when is_binary(FP), is_atom(M), is_atom(F), is_integer(A) ->
-    Tab = trust_whitelist:table(),
+    Tab = semp_whitelist:table(trust),
     case ets:lookup(Tab, FP) of
         []              -> false;          %% not whitelisted
         [{_, any}]      -> true;           %% fully open for this FP

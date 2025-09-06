@@ -83,11 +83,12 @@ start_link() ->
         | {stop, {listen_failed, term()}}.
 init([]) ->
     semp_io:print_color([bold,red],"Using TRUST distribution.",[]),
-    case trust_whitelist:whitelist_path() of
-            fail -> semp_io:print_color([bold,red],"No whitelist.config found. This is a client/standalone node.",[]),
+    case semp_whitelist:whitelist_path(trust) of
+            fail -> semp_io:print_color([bold,red],"No trust whitelist.config found. No TRUST connections will be accepted.",[]),
 		    {ok, standalone, hibernate};
-            _    -> logger:notice("Whitelist.config found in priv directory. Accepting external connections."),
-		        WTableName = trust_whitelist:ensure(),%load the whitelist
+            _    -> logger:notice("Trust whitelist data file found in priv directory. Accepting external trust connections."),
+		        io:format("trust whitelist file ~p~n",[semp_whitelist:whitelist_path(trust)]),
+			WTableName = semp_whitelist:ensure(trust),%load the whitelist
 			trust_suspicion:ensure(),%create the suspicion table
 			trust_suspicion:seed_from_whitelist(WTableName),
 			trust_token:ensure(),
