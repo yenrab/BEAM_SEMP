@@ -310,7 +310,12 @@ default_map() ->
       inet_udp  => all,
       ssh       => all,
       inets     => all,
+      httpd     => all,  
+      httpc     => all, 
+      socket    => all,
 
+%% (optional legacy parser)
+http_uri => all.
       %% ---------- Node/process/system control & registries ----------
       init            => all,   %% (all functions blocked, per your change)
       persistent_term => all,
