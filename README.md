@@ -218,22 +218,21 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
   [*] --> accepting
-  accepting --> tls: ssl:handshake
-  tls --> id_ok: client cert ok -> FP
-  tls --> drop: tls alert/verify error
+  accepting --> tls_handshake: ssl&#58handshake
+  tls_handshake --> id_ok: client cert ok → FP
+  tls_handshake --> drop: tls alert / verify error
   id_ok --> whitelist_check
   whitelist_check --> drop: FP not allowed
   whitelist_check --> token_phase
   token_phase --> await_req: issued new token
   token_phase --> await_req: valid token present
   await_req --> eval_req: call/cast frame ok
-  await_req --> drop: timeout/invalid frame
+  await_req --> drop: timeout / invalid frame
   eval_req --> send_result: allowed; user code ok (CALL)
   eval_req --> close: allowed; user code ok (CAST)
-  eval_req --> close: forbidden/denied/user error (log + suspicion++)
+  eval_req --> close: forbidden / denied / user error (log + suspicion++)
   send_result --> close
   close --> [*]
-  drop --> [*]
 ```
 
 ```code
@@ -284,7 +283,7 @@ stateDiagram-v2
 
 - **Whitelist is authoritative.** `any` is allowed but weaker—prefer explicit per-module function allowlists. Missing PEMs in the whitelist are ignored (with warnings). Keep `priv/trust_whitelist.config` under the **host app’s** `priv/`.
 
-- **Suspicion/quarantine tuning.** Increments on protocol violations, forbidden/denied MFAs, timeouts, user code errors. Decrements on successful permitted requests. Exceeding the limit sets `quarantined` and deletes the token and quarenteens the requester.
+- **Suspicion/quarantine tuning.** Increments on protocol violations, forbidden/denied MFAs, timeouts, user code errors. Decrements on successful permitted requests. Exceeding the limit sets `quarantined` and deletes the token and quarenteens the requester. Quarenteened peers require an out-of-system reset.
 
 - **Operational hardening.** Use per-connection timeouts, accept backoff on errors, and consider connection rate limiting. Ensure ETS tables are created with read/write concurrency flags and appropriate privacy (whitelist read-only to normal processes).
 
