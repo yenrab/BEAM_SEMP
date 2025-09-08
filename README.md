@@ -194,6 +194,7 @@ sequenceDiagram
     end
   end
 ```
+## Mermaid — handshake with existing token
 ```mermaid
 sequenceDiagram
   autonumber
@@ -215,6 +216,7 @@ sequenceDiagram
     S-->>C: Close
   end
 ```
+## Mermaid — Server FSM (per connection)
 ```mermaid
 stateDiagram-v2
   [*] --> accepting
