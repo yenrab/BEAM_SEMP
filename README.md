@@ -26,7 +26,6 @@ rebar3 shell
 ```
 
 # TRUST : Trusted, Rapid, Unmodifiable, Secure Topology
-# TRUST: One-shot, mTLS-gated RPC over TLS (no EPMD)
 
 **TRUST** (Trusted, Rapid, Unmodifiable, Secure Topology) is a **strict, request-per-connection** overlay for BEAM nodes. It replaces the Erlang distribution handshake entirely, **does not use EPMD**, and requires clients to connect to an explicit **host:port** (DNS A/AAAA only; **no SRV**). Every connection executes at most **one** request (CALL or CAST) and then closes.
 
