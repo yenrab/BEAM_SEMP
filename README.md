@@ -219,6 +219,7 @@ sequenceDiagram
 ## Mermaid — Server FSM (per connection)
 ```mermaid
 stateDiagram-v2
+stateDiagram-v2
   [*] --> accepting
   accepting --> tls_handshake: ssl&#58handshake
   tls_handshake --> id_ok: client cert ok → FP
@@ -230,13 +231,14 @@ stateDiagram-v2
   token_phase --> await_req: valid token present
   await_req --> eval_req: call/cast frame ok
   await_req --> drop: timeout / invalid frame
-  eval_req --> send_result: allowed; user code ok (CALL)
-  eval_req --> close: allowed; user code ok (CAST)
+  eval_req --> send_result: allowed - user code ok (CALL)
+  eval_req --> close: allowed - user code ok (CAST)
   eval_req --> close: forbidden / denied / user error (log + suspicion++)
   send_result --> close
   close --> [*]
 ```
 
+## Example TRUST configuration config/sys.config
 ```code
 [
   %% Never auto-connect distributed Erlang
