@@ -1,30 +1,34 @@
 # SEMP
 
-SEMP is an Erlang application implementing TRUST (Trusted, Rapid, Unmodifiable, Secure Topology) as a custom, DNS-based, **non-EPMD** distribution overlay. Each RPC uses connect→(token path)→call→close.
 
-- TLS 1.3 mTLS with client certs
-- Whitelist via SHA-512 of TBSCertificate
-- Token-accelerated reconnect (short TTL)
-- Per-node permissions (modules/functions) + suspicion levels
-- No errors are sent to clients; server logs + adjusts suspicion and closes
+SEMP is a secure communication network overlay for large-scale distributed systems. It uses the distributed Erlang protocol and a custom, DNS-based, **non-EPMD** distribution overlay. Each RPC uses connect→(token path)→call→close. SEMP is comprised two parts: TRUST for stable, long-lived nodes and TEMPUS for ephemeral nodes. 
 
-## Layout
+**TRUST** relies on a node-specific whitelist, connect-reconnect mechanism, and permissions dataset to control communication and defeat intrusions. The TRUST uses mTLS for secure connections and employs a token-based handshake optimization for faster reconnection. TRUST uses a multi-tiered suspicion system to identify and remove untrustworthy nodes, yet allows self-healing and graceful degradation.  
 
-- `src/` modules (incl. `trust_dist.erl` carrier)
-- `include/semp.hrl`
-- `priv/certs/` (dev-only)
-- `rebar.config`, `.gitignore`, `LICENSE.md`, `README.md`
+**TEMPUS**, a Cyclon-based network overlay, enables ephemeral node discovery and security, utilizing certificates,and  mTLS for efficient and secure communication.  TEMPUS ensures your dynamic network environment is robust and secure.
+
+
+Each SEMP RPC call uses a connect→(token path)→call→close behavior to avoid complete graph speed problems. SEMP uses
+
+- TLS 1.3 mTLS with client certs,
+- Whitelist via SHA-512 of TBSCertificates,
+- Token-accelerated reconnect (short TTL),
+- Per-node permissions (modules/functions) + suspicion levels, while
+- No errors are sent to clients that malicious actors can leverage.
 
 ## Build
+
+Include SEMP as a dependency in your BEAM application and it will be compiled for you. If you want to help develop SEMP, use rebar3 in your pre-system testing builds.
 
 ```bash
 rebar3 compile
 rebar3 shell
 ```
 
+# TRUST : Trusted, Rapid, Unmodifiable, Secure Topology
 
+# TEMPUS : Transient Entities Managed by a Peer-overlay for Unified Security
 
-# TEMPUS + Cyclon: Secure, Unbiased Peer Sampling
 
 TEMPUS is a secure peer–sampling and membership layer that uses the **Cyclon** gossip protocol to keep three **independent** peer sets fresh and unbiased—**within a single process**. Each peer set (“type”) has its own Cyclon view, capacity, and shuffle cadence. There is **no cross-type shuffle**.
 
