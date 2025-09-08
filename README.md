@@ -92,7 +92,7 @@ On iOS use **App Attest** (and on Android **Play Integrity**) during token issua
 
 ```mermaid
 sequenceDiagram
-    participant P as Peer (tempus_edge / bridge / sentinel)
+    participant P as Peer (edge / bridge / sentinel)
     participant A as Platform Attestation (App Attest / Play Integrity)
     participant I as Producer Issuer (Token Service)
     participant V as Verifier Peer
@@ -100,17 +100,16 @@ sequenceDiagram
 
     Note over P: Generate Ed25519 keypair → derive peer_id
     P->>A: Request attestation for this app/device
-    A-->>I: Attestation evidence (to be validated)
+    A-->>I: Forward attestation evidence
     P->>I: {peer_pub, typ} + attestation proof
-    I-->>I: Validate attestation; check policy
+    Note right of I: Validate attestation and check policy
     I-->>P: Short-lived token (kid=current, sub=peer_pub, typ, nbf/exp)
 
     Note over P: Build advert {peer_id, peer_pub, token, typ}
-    P->>V: Advert + POP challenge response on request
-
-    V-->>V: Check kid==current; verify token signature; check nbf/exp; sub==peer_pub
+    P->>V: Send advert
+    V-->>V: Verify token (kid=current, signature, nbf/exp, sub==peer_pub)
     V->>P: POP challenge (fresh nonce)
-    P-->>V: Signature over (nonce || token) using peer_priv
-    V-->>V: Verify POP with peer_pub (from token.sub)
+    P-->>V: POP response = Sign (nonce || token) with peer_priv
+    V-->>V: Verify POP using peer_pub (from token.sub)
     V->>C: Admit peer into store by typ (no cross-type mixing)
 ```
