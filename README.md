@@ -219,7 +219,6 @@ sequenceDiagram
 ## Mermaid — Server FSM (per connection)
 ```mermaid
 stateDiagram-v2
-stateDiagram-v2
   [*] --> accepting
   accepting --> tls_handshake: ssl&#58handshake
   tls_handshake --> id_ok: client cert ok → FP
