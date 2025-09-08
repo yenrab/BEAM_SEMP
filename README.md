@@ -20,7 +20,7 @@ SEMP is an Erlang application implementing TRUST (Trusted, Rapid, Unmodifiable, 
 ```bash
 rebar3 compile
 rebar3 shell
-
+```
 
 
 
@@ -113,3 +113,4 @@ sequenceDiagram
     P-->>V: Signature over (nonce || token) using peer_priv
     V-->>V: Verify POP with peer_pub (from token.sub)
     V->>C: Admit peer into store by typ (no cross-type mixing)
+```
