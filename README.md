@@ -195,7 +195,7 @@ sequenceDiagram
     end
   end
 ```
-``mermaid
+```mermaid
 sequenceDiagram
   autonumber
   participant C as Client
