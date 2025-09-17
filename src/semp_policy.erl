@@ -192,10 +192,10 @@ default_prefixes() ->
 
 
 -doc "Purpose:\n"
-     "Returns the default security policy map for sandboxing/evaluating untrusted code. The map\n"
+     "Returns the default security policy map for denying direct requests to execute untrusted code. The map\n"
      "enumerates Erlang/OTP modules and functions that are considered risky and should be denied,\n"
      "either per-function (arity-aware) or at the entire-module level (value `all`). This policy is\n"
-     "used as a baseline deny list for system-, I/O-, networking-, code-loading, and VM-control\n"
+     "used as a baseline deny list for system-, I/O-, networking-, code-loading, VM-control, and other\n"
      "surfaces.\n"
      "\n"
      "Parameters:\n"

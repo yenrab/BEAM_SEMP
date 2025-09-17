@@ -434,3 +434,32 @@ sequenceDiagram
     V-->>V: Verify POP using peer_pub (from token.sub)
     V->>C: Admit peer into store by typ (no cross-type mixing)
 ```
+
+## SEMP Comparisions
+
+| Dimension                   | gRPC in Erlang                                                                 | SEMP |
+|----------------------------|----------------------------------------------------------------------------------|------|
+| Transport / wire           | HTTP/2 (“h2”), HPACK, frames, streams                                            | TLS 1.3 over TCP, custom ALPN "trust/1", ETF frames. |
+| Interoperability           | Excellent: polyglot (all major languages)                                        | In developement. Swift first, others follow. |
+| AuthN                      | TLS/mTLS via standard HTTP/2 stack                                               | mTLS + SHA-512 cert fingerprint whitelist + per-node token |
+| AuthZ                      | Per-service/method (app logic)                                                   | Built-in per-MFA allowlists + suspicion/quarantine |
+| Connection model           | Long-lived, multiplexed streams                                                  | Per-request connect → RPC → close (token speeds reconnect) |
+| Streaming                  | Native client/server/bidi streaming                                              | Not supported. (one request per TLS session) Early roadmap |
+| Backpressure / flow control| HTTP/2 stream & connection flow control                                          | None yet. Implementing sounding node control first for security reasons. |
+| Payload format             | Protobuf (schema/IDL, compact cross-lang)                                        | Erlang terms (ETF) – zero schema, you call {M,F,A} directly (guarded by white and blacklist) |
+| Latency (warm path)        | Very good (no handshake per call)                                                | Handshake per request; tokens used to speed reconnect |
+| Performance at scale       | High throughput via multiplexing (multiple RPC calls per connection)             | Many short TLS handshakes; more CPU/RTT overhead, complete graph problem avoided. Time limitted multiplexing in early roadmap to reduce overhead. |
+| Service discovery          | DNS, SRV, LB/Envoy/xDS, gRPC naming                                              | DNS name + port; simple |
+| Middlebox/LB friendliness  | Excellent (Envoy/Nginx support)                                                  | Custom ALPN/port(TRUST); TEMPUS load balanced without external tools. Middleboxs allowed. |
+| Observability/tooling      | Mature (interceptors, tracing, metrics)                                          | Logging built into the source code for all SEMP state changes, app dev indicates logging level and log information destination |
+| Security posture           | Solid baseline; policy layered in app                                            | Tight, opinionated policy (whitelist, blacklist, suspicion, MFA bans) |
+| Access control granularity | Per RPC method (service API)                                                     | Very granular per module/function/arity |
+| Error semantics            | Standard gRPC status codes                                                       | Purposefully non-verbose (RESULT/ERROR frames; “no result on deny/cast”). Logged locally. |
+| Versioning / evolution     | Protobuf compatibility rules                                                      | ETF terms. No atoms. |
+| Binary size / deps         | Heavier (HTTP/2, Protobuf stack)                                                 | Light (ssl + small libs) |
+| Polyglot clients           | Many                                                                              | In developement (Swift first) |
+| Suitability for internal BEAM | Fine, but overkill if only BEAM ↔ BEAM                                       | Excellent (matches BEAM terms, deep security model) |
+| Governance / control       | Constrained by gRPC conventions                                                  | Full control (handshake, tokens, policies) |
+| Failure isolation          | Stream-level reset without reconnect                                             | Each call isolated by connection; small blast-radius limits damage, connection close on failure/error |
+| Sounding Clients           | no support                                                                       | Early roadmap implementation |
+| Native Code Look and Feel  | Define services/messages in .proto, generate stubs; call via generated modules.  | Call/cast plain MFAs: `trpc:call(Host, Port, {M,F,A}, Args, Opts);` no IDL needed. |
