@@ -437,7 +437,7 @@ sequenceDiagram
 
 ## SEMP Comparisions
 
-| Dimension                   | gRPC in Erlang                                                                 | SEMP |
+| Dimension                   | gRPC                                                                 | SEMP |
 |----------------------------|----------------------------------------------------------------------------------|------|
 | Transport / wire           | HTTP/2 (“h2”), HPACK, frames, streams                                            | TLS 1.3 over TCP, custom ALPN "trust/1", ETF frames. |
 | Interoperability           | Excellent: polyglot (all major languages)                                        | In developement. Swift first, others follow. |
