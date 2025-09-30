@@ -411,27 +411,27 @@ PropEr: out-of-order mapping; no phantom RESULTs; at-most-once RESULT per accept
 - **2025-09-26 (3) Alternative: sequential multi-call, no concurrency •** Originator: Noah • Status: Pending  
   Rationale: Simpler; preserves ordering; lower throughput.  
   Impact: Smaller diff; fewer metrics.
-- **2025-09-26 (4) RPC worker ownership via per-connection DynamicSupervisor •** Originator: User • Status: Approved  
+- **2025-09-26 (4) RPC worker ownership via per-connection DynamicSupervisor •** Originator: Lee • Status: Approved  
   Rationale: Uniform lifecycle; clean draining; isolated failures.  
   Impact: +1 proc per connection; simpler cleanup & metrics.
-- **2025-09-26 (5) Default `session.max_inflight = 8` and overridable via sys.config •** Originator: User • Status: Approved  
+- **2025-09-26 (5) Default `session.max_inflight = 8` and overridable via sys.config •** Originator: Lee • Status: Approved  
   Rationale: Reasonable baseline concurrency with runtime configurability.  
   Impact: Predictable resources; tunable.
-- **2025-09-26 (6) Queue policy: No user-space queue (Option A) •** Originator: User • Status: Approved  
+- **2025-09-26 (6) Queue policy: No user-space queue (Option A) •** Originator: Lee • Status: Approved  
   Rationale: Simpler and safer; rely on kernel backpressure.  
   Impact: Slightly higher tail under micro-bursts; reduced memory exposure.
-- **2025-09-29 (7) GOAWAY policy Option B + Post-GOAWAY handling •** Originator: User • Status: Approved  
+- **2025-09-29 (7) GOAWAY policy Option B + Post-GOAWAY handling •** Originator: Lee • Status: Approved  
   Rationale: Extend reasons `{limit_reached, shutdown, deny, protocol}`; sender closes; refused count; suspicion only on `{deny,protocol}`.  
   Impact: Clear close semantics; graceful vs immediate as appropriate.
-- **2025-09-29 (8) Default `drain_ms = 1000 ms` •** Originator: User • Status: Approved  
+- **2025-09-29 (8) Default `drain_ms = 1000 ms` •** Originator: Lee • Status: Approved  
   Rationale: Short grace for in-flight work; capped by idle.  
   Impact: Predictable shutdown; better chance to deliver results.
-- **2025-09-29 (9) Rename drain_ms_default→drain_ms; code default + sys.config override •** Originator: User • Status: Approved  
+- **2025-09-29 (9) Rename drain_ms_default→drain_ms; code default + sys.config override •** Originator: Lee • Status: Approved  
   Rationale: Single public knob; clearer semantics.  
   Impact: Simpler ops.
-- **2025-09-29 (10) Config validation: Fail-fast on invalid values •** Originator: User • Status: Approved  
+- **2025-09-29 (10) Config validation: Fail-fast on invalid values •** Originator: Lee • Status: Approved  
   Rationale: Prevent undefined behavior; catch misconfig early.  
   Impact: Safer operations.
-- **2025-09-29 (11) Cancellation v1: cancel-by-close (kill_workers) •** Originator: User • Status: Approved  
+- **2025-09-29 (11) Cancellation v1: cancel-by-close (kill_workers) •** Originator: Lee • Status: Approved  
   Rationale: Simple, safe semantics aligned with no-error-frames posture.  
   Impact: Coarse cancellation; clients reconnect for new work.
