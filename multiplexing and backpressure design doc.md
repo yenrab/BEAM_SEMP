@@ -114,7 +114,7 @@ graph LR
 ```mermaid
 %% diagram: supervision-tree
 graph TD
-  Root[beam_semp_sup] --> Listener_Sup[trust_listener_sup] --> Listener[trust_listener]
+  Root[beam_semp_sup] --> Listener_Sup[trust_listener_sup]
   Root --> ConnSup[trust_conn_sup]
   ConnSup --> ConnFSM1[trust_conn_fsm]
   ConnFSM1 --> ConnWorkerSup1[trust_conn_worker_sup]

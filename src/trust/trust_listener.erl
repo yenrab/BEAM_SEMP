@@ -180,23 +180,18 @@ handle_cast(accept, #{lsock := LS, conns := Conns0} = St0) ->
     case ssl:transport_accept(LS, infinity) of
         {ok, Sock} ->
 	    logger:debug("trust_listener: transport accepted on ~p~n",[LS]),
-            %% spawn a runner that *waits* for the socket
-            {Pid, MRef} = spawn_monitor(fun() ->
-                receive
-                    {handoff, S} -> trust_conn:start(S)
-                after 30000 ->
-                    exit(timeout_waiting_for_handoff)
-                end
-            end),
+             %% start a supervised per-connection FSM (no socket yet)
+             {ok, Pid} = supervisor:start_child(trust_conn_sup, [[pending]]),
+                MRef = erlang:monitor(process, Pid),
 
             %% transfer ownership before the child touches Sock
             case ssl:controlling_process(Sock, Pid) of
                 ok ->
                     Peer = case ssl:peername(Sock) of {ok, P} -> P; _ -> undefined end,
-                    Pid ! {handoff, Sock},
+                    gen_statem:cast(Pid, {handoff, Sock}),
                     Conns = Conns0#{ MRef => #{pid => Pid,
-                                                peer => Peer,
-                                                started_at => erlang:monotonic_time()} },
+                                                 peer => Peer,
+                                                 started_at => erlang:monotonic_time()} },
                     gen_server:cast(self(), accept),
                     {noreply, St0#{conns := Conns}};
                 {error, closed} ->
