@@ -59,6 +59,7 @@
 
 # Mermaid Diagrams
 
+## Multiplexing Sequence
 ```mermaid
 %% diagram: sequence-multiplex
 sequenceDiagram
@@ -78,6 +79,7 @@ sequenceDiagram
   S-->>C: Close
 ```
 
+## State Session
 ```mermaid
 %% diagram: state-session
 stateDiagram-v2
@@ -91,6 +93,7 @@ stateDiagram-v2
   closing --> [*]
 ```
 
+## Runtime Components
 ```mermaid
 %% diagram: components-runtime
 graph LR
@@ -107,10 +110,11 @@ graph LR
  suspicion)]
 ```
 
+## Supervision Tree
 ```mermaid
 %% diagram: supervision-tree
 graph TD
-  Root[beam_semp_sup] --> Listener[trust_listener_sup]
+  Root[beam_semp_sup] --> Listener_Sup[trust_listener_sup] --> Listener[trust_listener]
   Root --> ConnSup[trust_conn_sup]
   ConnSup --> ConnFSM1[trust_conn_fsm]
   ConnFSM1 --> ConnWorkerSup1[trust_conn_worker_sup]
