@@ -353,12 +353,12 @@ flowchart LR
     FSM[semp_conn_fsm]
     SUP[semp_conn_worker_sup]
     W1[worker]
-    W2[worker]
     ETS[(whitelist/tokens/suspicion)]
   end
-  C -- TLS1.3 ETF --> L --> FSM --> SUP --> W1
+  SUP --> W1
+  C -- TLS1.3 ETF --> L --> FSM
   FSM --> ETS
-  FSM --> W2
+  FSM --> W1
   ```
   ## STRIDE (examples)
 | Category | Threat | Mitigations |
