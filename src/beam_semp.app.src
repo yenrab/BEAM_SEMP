@@ -1,0 +1,25 @@
+{application, beam_semp, [
+    {description, "An OTP application"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {semp_app, []}},
+    {applications, [
+        kernel,
+        stdlib
+    ]},
+    {env, [
+     {whitelist_autoload, true},
+     {whitelist_default_spec, []},
+     {session, #{
+         max_inflight => 8,
+         max_age_ms => 60000,
+         idle_ms => 5000,
+         max_calls => 100,
+         drain_ms => 1000
+     }}
+          ]
+    },
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, []}
+ ]}.
