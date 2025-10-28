@@ -19,7 +19,29 @@
      }}
           ]
     },
-    {modules, []},
+    {modules, [
+        semp_app,
+        semp_dns,
+        semp_events,
+        semp_io,
+        semp_kill_it_all,
+        semp_policy,
+        semp_sup,
+        semp_util,
+        semp_whitelist,
+        trpc_loader,
+        trpc,
+        trust_conn_fsm,
+        trust_conn_sup,
+        trust_conn_worker_sup,
+        trust_conn,
+        trust_listener_sup,
+        trust_listener,
+        trust_rpc_worker,
+        trust_suspicion,
+        trust_token,
+        trust_ssl_facade
+    ]},
     {licenses, ["Apache-2.0"]},
     {links, []}
  ]}.

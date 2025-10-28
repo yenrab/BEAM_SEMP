@@ -62,7 +62,7 @@ start_link() ->
      "- `[]` — no arguments are expected.\n"
      "\n"
      "Return Value:\n"
-     "- `{ok, #{lsock := ssl:sslsocket(), conns := map()}}` — listener started successfully.\n"
+     "- `{ok, #{lsock := semp_facades:sslsocket(), conns := map()}}` — listener started successfully.\n"
      "- `[]` — no whitelist found; running as a standalone node (no external connections).\n"
      "- `{stop, {listen_failed, eaddrinuse}}` — port is already in use.\n"
      "- `{stop, {listen_failed, Reason :: term()}}` — binding the listener failed for another reason.\n"
@@ -77,7 +77,7 @@ start_link() ->
      "Last Modified: 2025-09-01\n".
 
 -spec init([]) ->
-          {ok, #{lsock := ssl:sslsocket(), conns := map()}}
+          {ok, #{lsock := semp_facades:sslsocket(), conns := map()}}
         | []
         | {stop, {listen_failed, eaddrinuse}}
         | {stop, {listen_failed, term()}}.
@@ -100,7 +100,7 @@ init([]) ->
     			TlsOpts = tls_server_opts(),
         		io:format("listener about to bind port ~p~n",[Port]),
     			%% 2) Try to bind (fail clearly on conflicts)
-    			case ssl:listen(Port, [{reuseaddr, true} | TlsOpts]) of
+    			case semp_facades:listen(Port, [{reuseaddr, true} | TlsOpts]) of
         			{ok, LSock} ->
             				io:format("port: ~p~nopts: ~p~n",[Port,[{reuseaddr,true}|TlsOpts]]),
             				gen_server:cast(self() , accept),
@@ -110,7 +110,7 @@ init([]) ->
             				logger:error("trust_listener: port ~p is already in use", [Port]),
             				{stop, {listen_failed, eaddrinuse}};
         			{error, Reason} ->
-            			logger:error("trust_listener: ssl:listen(~p, ...) failed: ~p", [Port, Reason]),
+            			logger:error("trust_listener: semp_facades:listen(~p, ...) failed: ~p", [Port, Reason]),
             			{stop, {listen_failed, Reason}}
     			end
     end.
@@ -126,7 +126,7 @@ init([]) ->
      "- None\n"
      "\n"
      "Return Value:\n"
-     "- `[{atom(), term()}]` — list of TLS option tuples for use with ssl:listen/2.\n"
+     "- `[{atom(), term()}]` — list of TLS option tuples for use with semp_facades:listen/2.\n"
      "\n"
      "Author: Lee Barney\n"
      "Version: 0.1\n"
@@ -177,12 +177,12 @@ tls_server_opts() ->
 -spec handle_cast(accept | term(), map()) -> {noreply, map()}.
 %% accept loop (listener)
 handle_cast(accept, #{lsock := LS, conns := Conns0} = St0) ->
-    case ssl:transport_accept(LS, infinity) of
+    case semp_facades:transport_accept(LS, infinity) of
         {ok, Sock} ->
 	    logger:debug("trust_listener: transport accepted on ~p~n",[LS]),
             %% Get session config from application env
             SessionConfig = application:get_env(beam_semp, session, #{}),
-            PeerInfo = case ssl:peername(Sock) of {ok, P} -> P; _ -> #{} end,
+            PeerInfo = case semp_facades:peername(Sock) of {ok, P} -> P; _ -> #{} end,
 
             %% Start FSM child spec
             ChildSpec = #{

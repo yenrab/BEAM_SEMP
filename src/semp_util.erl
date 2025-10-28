@@ -23,8 +23,8 @@
 -spec send_frame(ssl:sslsocket(), binary()) -> ok | fail.
 send_frame(Sock, Payload) when is_binary(Payload) ->
     Len = byte_size(Payload),
-    ok = ssl:send(Sock, <<Len:32/unsigned-big>>),
-    case ssl:send(Sock, Payload) of
+    ok = semp_facades:send(Sock, <<Len:32/unsigned-big>>),
+    case semp_facades:send(Sock, Payload) of
 	    ok-> ok;
 	    FailureReason -> logger:debug("Failed to send payload ~p~non socket ~p.~n Cause ~p~n",[Payload,Sock,FailureReason]),
 			     fail
@@ -47,7 +47,7 @@ send_frame(Sock, Payload) when is_binary(Payload) ->
      "- `{error, bad_frame}` — the frame header was invalid.\n"
      "- `{error, timeout}` — receive timed out.\n"
      "- `{error, closed}` — the socket was closed.\n"
-     "- `Other :: term()` — any other error tuple from `ssl:recv/3`.\n"
+     "- `Other :: term()` — any other error tuple from `semp_facades:recv/3`.\n"
      "\n"
      "Author: Lee Barney\n"
      "Version: 0.1\n"
@@ -61,9 +61,9 @@ send_frame(Sock, Payload) when is_binary(Payload) ->
         | {error, closed}
         | term().
 recv_frame(Sock, Timeout) ->
-    case ssl:recv(Sock, 4, Timeout) of
+    case semp_facades:recv(Sock, 4, Timeout) of
         {ok, <<Len:32/unsigned-big>>} when Len =< 8*1024*1024 ->
-            ssl:recv(Sock, Len, Timeout);
+            semp_facades:recv(Sock, Len, Timeout);
         {ok, _Bad} ->
             {error, bad_frame};
         {error, timeout} ->

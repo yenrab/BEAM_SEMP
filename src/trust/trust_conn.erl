@@ -28,7 +28,7 @@
      "delegating to after_tls/1 for post-handshake processing.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — the accepted TLS socket.\n"
+     "- `Sock :: semp_facades:sslsocket()` — the accepted TLS socket.\n"
      "\n"
      "Return Value:\n"
      "- `Result :: term()` — the success value returned by after_tls/1.\n"
@@ -43,30 +43,30 @@
      "\n"
      "Last Modified: 2025-09-01\n".
 
--spec start(ssl:sslsocket()) -> term() | ok.
+-spec start(semp_facades:sslsocket()) -> term() | ok.
 start(Sock) ->
     process_flag(trap_exit, true),
     logger:debug("trust_conn: starting TLS handshake on ~p.~n",[Sock]),
     HandshakeTimeOut = application:get_env(trust, client_handshake_timeout, 5000),
-    Ssl = case ssl:handshake(Sock, HandshakeTimeOut) of
+    Ssl = case semp_facades:handshake(Sock, HandshakeTimeOut) of
         ok                -> Sock;
 	{ok, S2}          -> S2;
-        {error, Reason}   -> ssl:close(Sock), 
+        {error, Reason}   -> semp_facades:close(Sock), 
 			     exit({tls_handshake_failed, Reason})
     end,
     logger:debug("trust_conn: ssl handshake complete"),
     %% enforce ALPN selection
-    case ssl:negotiated_protocol(Ssl) of
+    case semp_facades:negotiated_protocol(Ssl) of
         {ok, <<"trust/1">>} -> ok;
         {ok, Other}         -> 
 		    logger:debug("trust_conn: alpn missmatch ~p.~n",[Other]),
-		    ssl:close(Ssl), exit({alpn_mismatch, Other});
+		    semp_facades:close(Ssl), exit({alpn_mismatch, Other});
         {error, R}          -> 
 		    logger:debug("trust_con: alpn error: ~p~n",[R]),
-		    ssl:close(Sock), exit({alpn_missing, R})
+		    semp_facades:close(Sock), exit({alpn_missing, R})
     end,
     logger:debug("trust_conn: ALPN passed"),
-    ssl:setopts(Ssl, [{active, false}, {mode, binary}]),
+    semp_facades:setopts(Ssl, [{active, false}, {mode, binary}]),
     %% proceed: peercert -> fingerprint -> whitelist -> token/CALL -> close, etc.
     after_tls(Ssl).
 
@@ -79,7 +79,7 @@ start(Sock) ->
      "closed and terminated with an appropriate exit reason.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — the TLS socket representing the client connection.\n"
+     "- `Sock :: semp_facades:sslsocket()` — the TLS socket representing the client connection.\n"
      "\n"
      "Return Value:\n"
      "- `Result :: term()` — success value returned by maybe_recv_token_or_issue/2.\n"
@@ -96,11 +96,11 @@ start(Sock) ->
      "\n"
      "Last Modified: 2025-09-01\n".
 
--spec after_tls(ssl:sslsocket()) -> term() | no_return().
+-spec after_tls(semp_facades:sslsocket()) -> term() | no_return().
 after_tls(Sock) ->
     %%this is the full handshake. How do we do the shorter version?
     %% mTLS identity -> SHA512(cert DER)
-    case ssl:peercert(Sock) of
+    case semp_facades:peercert(Sock) of
         {ok, CertDer} ->
             FP = semp_util:cert_fingerprint_sha512(CertDer),
 	    logger:debug("trust_conn: generated from certDer, fp=~p", [FP]),
@@ -117,19 +117,19 @@ after_tls(Sock) ->
                         false ->
                             %% Quarantined/suspicion exceeded: close silently
 			    logger:warning("trust_conn: fp: ~p~n is quarantined",[FP]),
-                            ssl:close(Sock), 
+                            semp_facades:close(Sock), 
 			    exit(quarantined)
                     end;
 
                 false ->
                     %% Not whitelisted: close silently
 		    logger:warning("trust_conn: whitelist_reject"),
-                    ssl:close(Sock), exit(whitelist_reject)
+                    semp_facades:close(Sock), exit(whitelist_reject)
             end;
 
         {error, Reason} ->
 	    logger:warning("conn: peercert error ~p", [Reason]),
-            ssl:close(Sock), exit({peer_no_cert, Reason})
+            semp_facades:close(Sock), exit({peer_no_cert, Reason})
     end.
 
 
@@ -140,7 +140,7 @@ after_tls(Sock) ->
      "tokens, closed connections, or receive errors terminate the connection with explicit reasons.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — the client TLS socket.\n"
+     "- `Sock :: semp_facades:sslsocket()` — the client TLS socket.\n"
      "- `FP :: binary()` — the client certificate fingerprint (peer identity).\n"
      "\n"
      "Return Value:\n"
@@ -159,7 +159,7 @@ after_tls(Sock) ->
      "\n"
      "Last Modified: 2025-09-02\n".
 
--spec maybe_recv_token_or_issue(ssl:sslsocket(), binary()) ->
+-spec maybe_recv_token_or_issue(semp_facades:sslsocket(), binary()) ->
           term()
         | no_return().
 maybe_recv_token_or_issue(Sock, FP) ->
@@ -176,7 +176,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
                         {error, Why} ->
 				    logger:warning("trust_token: invalid token presented by ~p (~p)", [FP, Why]),
                             catch trust_suspicion:bump(FP, up),%catch any throw by bumping suspicion
-                            ssl:close(Sock),
+                            semp_facades:close(Sock),
                             exit(token_reject)
                     end;
 
@@ -184,7 +184,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
                 Other ->
                     logger:warning("trust_conn: presented token not matching protocol. FP = ~p Token: ~p", [FP, Other]),
                     catch trust_suspicion:bump(FP, up),
-                    ssl:close(Sock),
+                    semp_facades:close(Sock),
                     exit(protocol_error)
             end;
 
@@ -194,7 +194,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
             trust_token:issue(FP),
 	    GeneratedToken=case trust_token:token_for(FP) of
 		    error -> 
-			    ssl:close(Sock),
+			    semp_facades:close(Sock),
 			    exit(token_error);
 		    Token ->Token
 	    end,
@@ -220,7 +220,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
      "suspicion handling and connection termination.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — the TLS socket connected to the client.\n"
+     "- `Sock :: semp_facades:sslsocket()` — the TLS socket connected to the client.\n"
      "- `FP :: binary()` — the client certificate fingerprint (peer identity).\n"
      "\n"
      "Return Value:\n"
@@ -239,7 +239,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
      "\n"
      "Last Modified: 2025-09-04\n".
 
--spec await_request_and_execute(ssl:sslsocket(), binary()) -> term() | no_return().
+-spec await_request_and_execute(semp_facades:sslsocket(), binary()) -> term() | no_return().
 await_request_and_execute(Sock, FP) ->
     CallTmo = application:get_env(trust, call_timeout_ms, 5000),
     logger:debug("trust_conn: waiting for request frame"),
@@ -266,12 +266,12 @@ await_request_and_execute(Sock, FP) ->
             end;
 
         {error, timeout} -> logger:debug("trust_conn: remote request timed out"),
-			    ssl:close(Sock), exit(call_timeout);
+			    semp_facades:close(Sock), exit(call_timeout);
         {error, closed}  -> logger:debug("trust_con: remote socket closed"),
 			    exit(peer_closed);
         {error, E}       ->
             logger:warning("recv_failed ~p (~p)", [FP, E]),
-            ssl:close(Sock), exit({recv_failed, E})
+            semp_facades:close(Sock), exit({recv_failed, E})
     end.
 %% ---- helpers (private) --------------------------------------------
 
@@ -282,7 +282,7 @@ await_request_and_execute(Sock, FP) ->
      "suspicion, may quarantine/revoke, closes the socket, and exits with an appropriate reason.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — the TLS socket connected to the client.\n"
+     "- `Sock :: semp_facades:sslsocket()` — the TLS socket connected to the client.\n"
      "- `FP :: binary()` — client certificate fingerprint.\n"
      "- `Type :: call | cast` — request type determining reply behavior.\n"
      "- `M :: module()` — target module.\n"
@@ -306,7 +306,7 @@ await_request_and_execute(Sock, FP) ->
      "Last Modified: 2025-09-04\n".
 
 -spec handle_mfa(
-          ssl:sslsocket(),
+          semp_facades:sslsocket(),
           binary(),
           call | cast,
           module(),
@@ -330,11 +330,11 @@ handle_mfa(Sock, FP, Type, M, F, A, Args, ReqId) ->
                         call ->
                             ok = semp_util:send_frame(
                                    Sock, term_to_binary(#{t => result, value => Ret})),
-                            ssl:close(Sock), ok;
+                            semp_facades:close(Sock), ok;
                         cast ->
 			    logger:debug("trust_conn: closing cast.~n"),
                             %% No reply on cast (success)
-                            ssl:close(Sock), ok
+                            semp_facades:close(Sock), ok
                     end
             catch
                 Class:Reason:_Stack ->
@@ -346,12 +346,12 @@ handle_mfa(Sock, FP, Type, M, F, A, Args, ReqId) ->
                         call ->
                             %% Send error for call, then close
                             ok = send_error_frame(Sock, Class, Reason),
-                            ssl:close(Sock),
+                            semp_facades:close(Sock),
                             exit(user_code_error);
                         cast ->
 				    io:format("error on cast~n"),
                             %% No reply on cast (error)
-                            ssl:close(Sock),
+                            semp_facades:close(Sock),
                             exit(user_code_error)
                     end
             end;
@@ -362,7 +362,7 @@ handle_mfa(Sock, FP, Type, M, F, A, Args, ReqId) ->
 	    logger:warning("trust_conn: bumping suspicion for ~p with id ~p~n",[FP,ReqId]),
             maybe_quarantine_and_revoke(FP),
             %% No reply for permission failures
-            ssl:close(Sock),
+            semp_facades:close(Sock),
             exit(permission_denied)
     end.
 
@@ -404,7 +404,7 @@ maybe_quarantine_and_revoke(FP) ->
      "and efficiency.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — the TLS socket to send the frame on.\n"
+     "- `Sock :: semp_facades:sslsocket()` — the TLS socket to send the frame on.\n"
      "- `Class :: term()` — the error type (e.g., throw, error, exit).\n"
      "- `Reason :: term()` — the reason associated with the error.\n"
      "\n"
@@ -421,7 +421,7 @@ maybe_quarantine_and_revoke(FP) ->
      "\n"
      "Last Modified: 2025-09-04\n".
 
--spec send_error_frame(ssl:sslsocket(), term(), term()) -> ok | fail.
+-spec send_error_frame(semp_facades:sslsocket(), term(), term()) -> ok | fail.
 send_error_frame(Sock, Class, Reason) ->
     %% Keep the error payload compact; omit stacktrace on the wire.
     Frame = term_to_binary(#{t => error, kind => Class, reason => Reason}),
@@ -506,7 +506,7 @@ mfa_in_spec(_, _, _, _) ->
      "longer trusted, it is quarantined; otherwise, the connection is terminated with the given reason.\n"
      "\n"
      "Parameters:\n"
-     "- `Sock :: ssl:sslsocket()` — the TLS socket to close.\n"
+     "- `Sock :: semp_facades:sslsocket()` — the TLS socket to close.\n"
      "- `FP :: binary()` — the client fingerprint.\n"
      "- `Reason :: term()` — the reason for denial or error.\n"
      "\n"
@@ -523,7 +523,7 @@ mfa_in_spec(_, _, _, _) ->
      "\n"
      "Last Modified: 2025-09-04\n".
 
--spec bump_up_maybe_quarantine_close(ssl:sslsocket(), binary(), term()) -> no_return().
+-spec bump_up_maybe_quarantine_close(semp_facades:sslsocket(), binary(), term()) -> no_return().
 bump_up_maybe_quarantine_close(Sock, FP, Reason) ->
     Res = catch trust_suspicion:bump(FP, up),
     case (catch trust_suspicion:is_trusted(FP)) of
@@ -531,12 +531,12 @@ bump_up_maybe_quarantine_close(Sock, FP, Reason) ->
             %% Quarantined: kill any fast-path token and drop
             catch trust_token:revoke_fp(FP),
             logger:warning("quarantined ~p due to ~p (bump=~p)", [FP, Reason, Res]),
-            ssl:close(Sock), exit(quarantined);
+            semp_facades:close(Sock), exit(quarantined);
         true ->
             logger:warning("deny/bump ~p due to ~p (bump=~p)", [FP, Reason, Res]),
-            ssl:close(Sock), exit(Reason);
+            semp_facades:close(Sock), exit(Reason);
         _ ->
-            ssl:close(Sock), exit(Reason)
+            semp_facades:close(Sock), exit(Reason)
     end.
 
 

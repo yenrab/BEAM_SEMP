@@ -224,12 +224,12 @@ try_endpoints(_CallType, [], _Port, _MFA, _Args, _Tmo) -> {error, connect_failed
 try_endpoints(CallType, [IP|Rest], Port, MFA, Args, Timeout) ->
     TlsOpts = tls_client_opts(host_to_sni(IP)),
     logger:debug("try_endpoints: about to connect IP: ~p~n",[IP]),
-    case ssl:connect(IP, Port, TlsOpts, Timeout) of
+    case semp_facades:connect(IP, Port, TlsOpts, Timeout) of
         {ok, Sock} ->
-		    logger:debug("ssl:connect got socket: ~p~n",[Sock]),
-		    ok = ssl:setopts(Sock, [{active, false}, {mode, binary}]),
+		    logger:debug("semp_facades:connect got socket: ~p~n",[Sock]),
+		    ok = semp_facades:setopts(Sock, [{active, false}, {mode, binary}]),
             Res = after_tls(CallType, Sock, MFA, Args, Timeout),
-            ssl:close(Sock),
+            semp_facades:close(Sock),
             Res;
         {error, Reason} ->
 		    logger:debug("connect to ~p:~p failed: ~p~nTrying next IP ~p~n", [IP, Port, Reason,Rest]),
@@ -273,7 +273,7 @@ host_to_sni(H) -> H.
      "\n"
      "Parameters:\n"
      "- `CallType :: call | cast` — operation type controlling reply behavior.\n"
-     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
+     "- `Sock :: semp_facades:sslsocket()` — established TLS socket.\n"
      "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
      "- `Args :: [term()]` — arguments for the remote function.\n"
      "- `Timeout :: integer()` — timeout in milliseconds for token receive and request flow.\n"
@@ -296,7 +296,7 @@ host_to_sni(H) -> H.
 
 -spec after_tls(
           call | cast,
-          ssl:sslsocket(),
+          semp_facades:sslsocket(),
           {module(), atom(), non_neg_integer()},
           [term()],
           integer()
@@ -310,7 +310,7 @@ after_tls(CallType, Sock, {M,F,A}, Args, Timeout) ->
     try
         %% 1) Server certificate (diagnose here if it fails)
         FP =
-            case ssl:peercert(Sock) of
+            case semp_facades:peercert(Sock) of
                 {ok, CertDer}   -> semp_util:cert_fingerprint_sha512(CertDer);
                 {error, Reason} -> throw({peer_cert_error, Reason})
             end,
@@ -345,7 +345,7 @@ after_tls(CallType, Sock, {M,F,A}, Args, Timeout) ->
         throw:Why -> {error, Why};
         Class:Term:Stack ->
             %% if anything crashes, don’t leave the TLS socket dangling
-            catch ssl:close(Sock),
+            catch semp_facades:close(Sock),
             {error, {client_after_tls_crash, Class, Term, Stack}}
     end.
 
@@ -356,7 +356,7 @@ after_tls(CallType, Sock, {M,F,A}, Args, Timeout) ->
      "\n"
      "Parameters:\n"
      "- `CallType :: call | cast` — operation type controlling reply behavior.\n"
-     "- `Sock :: ssl:sslsocket()` — established TLS socket.\n"
+     "- `Sock :: semp_facades:sslsocket()` — established TLS socket.\n"
      "- `{M,F,A} :: {module(), atom(), non_neg_integer()}` — target module, function, and arity.\n"
      "- `Args :: [term()]` — arguments list; its length must equal `A`.\n"
      "- `Timeout :: integer()` — timeout in milliseconds for result reception (CALL only).\n"
@@ -380,7 +380,7 @@ after_tls(CallType, Sock, {M,F,A}, Args, Timeout) ->
 
 -spec send_and_maybe_wait(
           call | cast,
-          ssl:sslsocket(),
+          semp_facades:sslsocket(),
           {module(), atom(), non_neg_integer()},
           [term()],
           integer()
@@ -455,7 +455,7 @@ safe_term(Bin) ->
      "- `SNI :: string() | undefined` — the server name indication to include in the TLS handshake.\n"
      "\n"
      "Return Value:\n"
-     "- `[{atom(), term()}]` — list of TLS option tuples for use with ssl:connect/4.\n"
+     "- `[{atom(), term()}]` — list of TLS option tuples for use with semp_facades:connect/4.\n"
      "\n"
      "Author: Lee Barney\n"
      "Version: 0.1\n"
