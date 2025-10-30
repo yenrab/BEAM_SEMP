@@ -3,8 +3,14 @@
 *.beam
 *.plt
 erl_crash.dump
+.dump
+*.dump
 .concrete/DEV_MODE
+*.coverdata
 
+# Test and coverage outputs
+logs/
+coverdata/
 
 # --------------------------------------------------------------------
 # Rebar3 build artifacts

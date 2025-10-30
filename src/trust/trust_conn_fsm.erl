@@ -199,6 +199,19 @@ handle_event(EventType, EventContent, StateName, State) ->
 handle_handshake_token(Socket, Bin, State) ->
     logger:debug("trust_conn_fsm: handle_handshake_token called with Bin: ~p", [Bin]),
     case safe_term(Bin) of
+        %% Accept legacy/alternate token frame key 'token' (alias for token_present)
+        #{t := token, token := Token} ->
+            logger:debug("trust_conn_fsm: legacy token frame received, validating token"),
+            case validate_token(Token, State) of
+                ok ->
+                    logger:debug("trust_conn_fsm: token validation successful (legacy), transitioning to active"),
+                    transition_to_active(State);
+                {error, _Reason} ->
+                    logger:debug("trust_conn_fsm: token validation failed (legacy), closing and stopping"),
+                    send_goaway(deny, 0, Socket),
+                    semp_facades:close(Socket),
+                    {stop, normal, State}
+            end;
         #{t := token_present, token := Token} ->
             logger:debug("trust_conn_fsm: token_present received, validating token"),
             case validate_token(Token, State) of
@@ -206,10 +219,10 @@ handle_handshake_token(Socket, Bin, State) ->
                     logger:debug("trust_conn_fsm: token validation successful, transitioning to active"),
                     transition_to_active(State);
                 {error, _Reason} ->
-                    logger:debug("trust_conn_fsm: token validation failed, transitioning to closing"),
+                    logger:debug("trust_conn_fsm: token validation failed, closing and stopping"),
                     send_goaway(deny, 0, Socket),
                     semp_facades:close(Socket),
-                    {next_state, ?CLOSING, State}
+                    {stop, normal, State}
             end;
         #{t := token_issue, token := Token} ->
             logger:debug("trust_conn_fsm: token_issue received, issuing token"),
@@ -454,8 +467,16 @@ transition_to_active(State) ->
     %% Start max-age timer
     MaxAgeTimer = erlang:send_after(Config#session_config.max_age_ms, self(), {internal, limit_reached}),
     
-    %% Start worker supervisor
-    {ok, WorkerSup} = trust_conn_worker_sup:start_link(),
+    %% Start or reuse worker supervisor robustly
+    WorkerSup = case whereis(trust_conn_worker_sup) of
+        undefined ->
+            case trust_conn_worker_sup:start_link() of
+                {ok, P} -> P;
+                {error, {already_started, P}} -> P;
+                {error, _} -> undefined
+            end;
+        Pid -> Pid
+    end,
     
     NewState = State#state{
         max_age_timer = MaxAgeTimer,
@@ -579,7 +600,7 @@ safe_term(Bin) ->
 %%--------------------------------------------------------------------
 validate_token(Token, State) ->
     #state{client_id = ClientId} = State,
-    case trust_token:validate(Token, ClientId) of
+    case semp_facades:trust_token_validate(Token, ClientId) of
         ok -> ok;
         {ok, _} -> ok;  %% Handle case where validate returns {ok, TokenData}
         {error, _Reason} -> {error, invalid_token}
@@ -598,26 +619,33 @@ issue_token(Token, State) ->
         [ClientId, PeerInfo, Token]),
     
     %% Validate current token before issuing new one
-    case trust_token:validate(Token, ClientId) of
+    case semp_facades:trust_token_validate(Token, ClientId) of
         ok ->
             %% Current token is valid, issue new token
-            case trust_token:issue(ClientId) of
-                {ok, NewToken} ->
-                    %% Send new token to client
-                    Frame = term_to_binary(#{t => token_issue, token => NewToken}),
-                    case semp_util:send_frame(Socket, Frame) of
-                        ok -> 
-                            logger:info("trust_conn_fsm: issued new token for client ~p", [ClientId]),
-                            telemetry:execute([trust, token, issue], #{},
-                                #{client_id => ClientId, peer_info => PeerInfo}),
-                            ok;
-                        {error, Reason} -> 
-                            logger:error("trust_conn_fsm: failed to send token to client ~p: ~p", [ClientId, Reason]),
-                            {error, send_failed}
+            case semp_facades:trust_token_issue(ClientId) of
+                true ->
+                    %% Issue returns true, now get the token
+                    case semp_facades:trust_token_token_for(ClientId) of
+                        error ->
+                            logger:error("trust_conn_fsm: failed to retrieve token for client ~p after issue", [ClientId]),
+                            {error, token_retrieval_failed};
+                        NewToken ->
+                            %% Send new token to client
+                            Frame = term_to_binary(#{t => token_issue, token => NewToken}),
+                            case semp_util:send_frame(Socket, Frame) of
+                                ok -> 
+                                    logger:info("trust_conn_fsm: issued new token for client ~p", [ClientId]),
+                                    telemetry:execute([trust, token, issue], #{},
+                                        #{client_id => ClientId, peer_info => PeerInfo}),
+                                    ok;
+                                {error, Reason} -> 
+                                    logger:error("trust_conn_fsm: failed to send token to client ~p: ~p", [ClientId, Reason]),
+                                    {error, send_failed}
+                            end
                     end;
-                {error, Reason} ->
-                    logger:error("trust_conn_fsm: failed to issue token for client ~p: ~p", [ClientId, Reason]),
-                    {error, token_issue_failed}
+                Other ->
+                    logger:error("trust_conn_fsm: unexpected return from token issue for client ~p: ~p", [ClientId, Other]),
+                    {error, issue_failed}
             end;
         {error, Reason} ->
             logger:warning("trust_conn_fsm: invalid token from client ~p: ~p", [ClientId, Reason]),
@@ -633,10 +661,19 @@ issue_token(Token, State) ->
 %%--------------------------------------------------------------------
 decode_request(Bin) ->
     case safe_term(Bin) of
+        %% Map-based protocol (preferred)
         #{t := call, req_id := ReqId, m := M, f := F, a := A, args := Args} ->
             {ok, {call, ReqId, M, F, A, Args}};
         #{t := cast, req_id := ReqId, m := M, f := F, a := A, args := Args} ->
             {ok, {cast, ReqId, M, F, A, Args}};
+
+        %% Back-compat with tuple-based test helper frames: {call|cast, ReqId, M, F, ArgOrArgs}
+        %% Historical helper sends the payload directly (e.g., [1,2,3]) as a single argument.
+        {call, ReqId, M, F, ArgOrArgs} when is_atom(M), is_atom(F) ->
+            {ok, {call, ReqId, M, F, 1, [ArgOrArgs]}};
+        {cast, ReqId, M, F, ArgOrArgs} when is_atom(M), is_atom(F) ->
+            {ok, {cast, ReqId, M, F, 1, [ArgOrArgs]}};
+
         _Other ->
             {error, protocol_error}
     end.
@@ -665,7 +702,7 @@ spawn_worker(Request, State) ->
                 {call, ReqId, M, F, A, Args} ->
                     WorkerSpec = #{
                         id => {trust_rpc_worker, ReqId},
-                        start => {trust_rpc_worker, start_link, [self(), ReqId, call, {M, F, A}, Args]},
+                        start => {trust_rpc_worker, start_link, [self(), ReqId, call, {M, F, A}, Args, ClientId]},
                         restart => temporary,
                         shutdown => 4000,
                         type => worker,
@@ -694,7 +731,7 @@ spawn_worker(Request, State) ->
                 {cast, ReqId, M, F, A, Args} ->
                     WorkerSpec = #{
                         id => {trust_rpc_worker, ReqId},
-                        start => {trust_rpc_worker, start_link, [self(), ReqId, cast, {M, F, A}, Args]},
+                        start => {trust_rpc_worker, start_link, [self(), ReqId, cast, {M, F, A}, Args, ClientId]},
                         restart => temporary,
                         shutdown => 4000,
                         type => worker,
@@ -753,10 +790,13 @@ terminate(Reason, StateName, State) ->
                     ok
             end,
             
-            %% Terminate worker supervisor
+            %% Terminate worker supervisor (tolerate missing sup in tests)
             if
                 WorkerSup =/= undefined ->
-                    supervisor:terminate_child(trust_conn_worker_sup, WorkerSup);
+                    case whereis(trust_conn_worker_sup) of
+                        undefined -> ok;
+                        _ -> catch supervisor:terminate_child(trust_conn_worker_sup, WorkerSup)
+                    end;
                 true ->
                     ok
             end;

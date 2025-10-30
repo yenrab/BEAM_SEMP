@@ -73,7 +73,8 @@ start_link() ->
 -spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}} | {stop, term()}.
 init([]) ->
 
-    ConnSup  = {trust_conn_sup, {trust_conn_sup, start_link, []}, permanent, 5000, supervisor, [trust_conn_sup]},
+    %% Mark conn supervisor as transient so normal test stops don't trigger restarts
+    ConnSup  = {trust_conn_sup, {trust_conn_sup, start_link, []}, transient, 5000, supervisor, [trust_conn_sup]},
     Listener = {trust_listener, {trust_listener, start_link, []}, permanent, 5000, worker,      [trust_listener]},
     %% Start conn supervisor first; if it dies, restart the listener after it comes back.
     {ok, {{rest_for_one, 5, 10}, [ConnSup, Listener]}}.

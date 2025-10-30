@@ -6,7 +6,7 @@
 -module(trust_rpc_worker).
 -behaviour(gen_server).
 
--export([start_link/5]).
+-export([start_link/6]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(SERVER, ?MODULE).
@@ -28,25 +28,26 @@
 %% Starts the RPC worker for a specific request.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(pid(), term(), call | cast, {module(), atom(), integer()}, [term()]) ->
+-spec start_link(pid(), term(), call | cast, {module(), atom(), integer()}, [term()], term()) ->
     {ok, pid()} | {error, term()}.
-start_link(FsmPid, ReqId, Type, MFA, Args) ->
-    gen_server:start_link(?MODULE, {FsmPid, ReqId, Type, MFA, Args}, []).
+start_link(FsmPid, ReqId, Type, MFA, Args, ClientId) ->
+    gen_server:start_link(?MODULE, {FsmPid, ReqId, Type, MFA, Args, ClientId}, []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Initializes the worker and executes the RPC.
 %% @end
 %%--------------------------------------------------------------------
--spec init({pid(), term(), call | cast, {module(), atom(), integer()}, [term()]}) ->
+-spec init({pid(), term(), call | cast, {module(), atom(), integer()}, [term()], term()}) ->
     {ok, #state{}} | {stop, term()}.
-init({FsmPid, ReqId, Type, MFA, Args}) ->
+init({FsmPid, ReqId, Type, MFA, Args, ClientId}) ->
     State = #state{
         fsm_pid = FsmPid,
         req_id = ReqId,
         request_type = Type,
         mfa = MFA,
         args = Args,
+        client_id = ClientId,
         start_time = erlang:monotonic_time()
     },
     
@@ -112,13 +113,11 @@ check_permissions(State) ->
 %% @end
 %%--------------------------------------------------------------------
 check_mfa_permissions(ClientId, M, F, A) ->
-    %% Use the same logic as trust_conn.erl perm_ok
-    Tab = semp_whitelist:table(trust),
-    case ets:lookup(Tab, ClientId) of
-        [] -> false;
-        [{_, any}] -> true;
-        [{_, Spec}] -> mfa_in_spec(M, F, A, Spec);
-        _ -> false
+    %% Use the same logic as trust_conn.erl perm_ok, via whitelist facade
+    case semp_whitelist:spec(trust, ClientId) of
+        undefined -> false;
+        any -> true;
+        Spec -> mfa_in_spec(M, F, A, Spec)
     end.
 
 mfa_in_spec(M, F, A, Spec) when is_list(Spec) ->

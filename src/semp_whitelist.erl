@@ -20,6 +20,7 @@
 
     %% queries
     is_allowed/2,
+    spec/2,
 
     %% path helpers
     whitelist_path/1
@@ -242,6 +243,21 @@ maybe_autoload_from_certs(Profile) ->
 is_allowed(Profile, FP) when is_binary(FP) ->
     ensure(Profile),
     ets:member(table(Profile), FP).
+
+
+%%
+%% Returns the authorization spec for a given fingerprint in the given profile.
+%% If the fingerprint is not present, returns 'undefined'.
+%% The spec value is whatever was inserted into the table (e.g., 'any', 'none', or
+%% a structured spec as produced by normalize_value/1).
+%%
+-spec spec(trust | tempus, binary()) -> undefined | any | none | term().
+spec(Profile, FP) when is_binary(FP) ->
+    ensure(Profile),
+    case ets:lookup(table(Profile), FP) of
+        [] -> undefined;
+        [{_Key, Value}] -> Value
+    end.
 
 
 
