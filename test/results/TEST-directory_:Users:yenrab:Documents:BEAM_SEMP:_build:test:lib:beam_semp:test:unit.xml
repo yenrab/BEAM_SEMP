@@ -1,0 +1,356 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite tests="42" failures="0" errors="26" skipped="0" time="17.248" name="directory &quot;/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/beam_semp/test/unit&quot;">
+  <testcase time="0.000" name="fixture setup [1,1,1,1]">
+    <error type="error">
+::in function meck_proc:start/2 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck_proc.erl, line 93)
+  called as start(telemetry,[unstick,passthrough])
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 47)
+**error:{already_started,&lt;0.396.0&gt;}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,1,1,2]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 36)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,1,1,3]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 36)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,1,1,4]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 36)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,1,1,5]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 36)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,1,1,6]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 36)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,1,1,7]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 36)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.723" name="trust_rpc_worker_unit_tests:0 setup_worker_test">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_rpc_worker_unit_tests:setup_worker_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_rpc_worker_unit_tests.erl, line 36)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 274)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 72)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 544)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 527)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.425" name="trust_listener_unit_tests:0 setup_listener_test">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_session_config_creation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_peer_info_creation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_request_creation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_response_creation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_frame_encoding">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_frame_decoding">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_reqid_generation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="simple_unit_tests:0 test_client_id_creation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,2]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,3]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,4]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,5]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,6]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,7]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,8]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,9]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,10]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,11]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,4,1,12]">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.551" name="trust_conn_fsm_unit_tests:0 setup_fsm_test">
+    <error type="error">
+::in function ets:new/2
+  called as new(test_whitelist,[public,named_table])
+in call from test_helpers:setup_test_env/0 (/Users/yenrab/Documents/BEAM_SEMP/test/test_helpers.erl, line 77)
+in call from trust_conn_fsm_unit_tests:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests.erl, line 41)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 274)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 72)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 544)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 527)
+**error:badarg
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="trust_conn_sup_unit_tests:0 setup_sup_test">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fsm_minimal_test:0 test_fsm_initialization">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fsm_minimal_test:0 test_session_config_creation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fsm_minimal_test:0 test_request_frame_encoding">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fsm_unit_tests_fixed:100 -fsm_init_with_default_config_test/1-fun-3-">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fsm_unit_tests_fixed:118 -fsm_handshake_token_success_test/1-fun-3-">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.363" name="fsm_unit_tests_fixed:0 setup_fsm_test">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,8,1,1]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,8,1,2]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,8,1,3]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,8,1,4]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [1,8,1,5]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.089" name="trust_conn_fsm_unit_tests_fixed:0 setup_fsm_test">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 274)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 72)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 544)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 527)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 469)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+</testsuite>

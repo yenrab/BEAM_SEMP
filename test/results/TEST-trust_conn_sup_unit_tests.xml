@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite tests="1" failures="0" errors="0" skipped="0" time="0.050" name="module 'trust_conn_sup_unit_tests'">
+  <testcase time="0.000" name="trust_conn_sup_unit_tests:0 setup_sup_test">
+    <system-out>
+    </system-out>
+  </testcase>
+</testsuite>

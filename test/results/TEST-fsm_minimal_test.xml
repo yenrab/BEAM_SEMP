@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite tests="3" failures="0" errors="0" skipped="0" time="0.010" name="module 'fsm_minimal_test'">
+  <testcase time="0.000" name="fsm_minimal_test:0 test_fsm_initialization">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fsm_minimal_test:0 test_session_config_creation">
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fsm_minimal_test:0 test_request_frame_encoding">
+    <system-out>
+    </system-out>
+  </testcase>
+</testsuite>

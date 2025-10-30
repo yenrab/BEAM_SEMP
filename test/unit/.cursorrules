@@ -1,0 +1,5 @@
+**Define AMW as Anlylize the problem, Make suggetsions, Wait for user decisions**.
+
+**In all integration and system tests, the components created as part of beam_semp should not be mocked. Any file, network, OS, etc. calls done in any of the components being integrated must be mocked.**
+
+**All mocking done must be of facade functions that do simple wrapping of the ETS, file, network, OS, etc. calls needed by the component being tested**.

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite tests="6" failures="0" errors="6" skipped="0" time="2.537" name="module 'trust_conn_fsm_unit_tests_fixed'">
+  <testcase time="0.000" name="fixture setup [2,1]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [2,2]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [2,3]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [2,4]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.000" name="fixture setup [2,5]">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+  <testcase time="0.473" name="trust_conn_fsm_unit_tests_fixed:0 setup_fsm_test">
+    <error type="error">
+::in function meck:check_expect_result/1 (/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/meck/src/meck.erl, line 764)
+in call from trust_conn_fsm_unit_tests_fixed:setup_fsm_test/0 (/Users/yenrab/Documents/BEAM_SEMP/test/unit/trust_conn_fsm_unit_tests_fixed.erl, line 49)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 274)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 72)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 544)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 527)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 469)
+**error:{undefined_function,{trust_suspicion,is_suspicious,1}}
+    </error>
+    <system-out>
+    </system-out>
+  </testcase>
+</testsuite>
