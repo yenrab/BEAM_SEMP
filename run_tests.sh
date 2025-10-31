@@ -103,25 +103,100 @@ run_test_phase "Phase 4: Performance Tests" \
     "Running performance benchmarks..."
 
 # Phase 5: Coverage Report
+# NOTE: This phase runs regardless of earlier test failures
+# Temporarily disable exit on error to ensure coverage always runs
+set +e
 echo "=== Phase 5: Test Coverage Report ==="
 echo "Generating coverage report..."
 echo ""
 
-if rebar3 as test cover --verbose; then
-    echo "✅ Coverage report generated successfully"
+# Ensure Working Docs directory exists
+mkdir -p "Working Docs"
+
+# Generate coverage data (without HTML) - capture to temp file
+COVERAGE_TMP="/tmp/coverage_output_$$.txt"
+COVERAGE_MD="Working Docs/test_coverage_report.md"
+
+# Clear any existing report
+rm -f "$COVERAGE_MD"
+
+# Run coverage and capture all output (don't fail script if this fails)
+echo "Running: rebar3 as test cover --verbose"
+rebar3 as test cover --verbose > "$COVERAGE_TMP" 2>&1
+COVERAGE_EXIT=$?
+
+echo "Coverage command exit code: $COVERAGE_EXIT"
+if [ -f "$COVERAGE_TMP" ]; then
+    echo "Temp file size: $(wc -c < "$COVERAGE_TMP") bytes"
+    echo "Temp file lines: $(wc -l < "$COVERAGE_TMP") lines"
+else
+    echo "Temp file was not created"
+fi
+
+# Always generate a report file, even if coverage command failed
+{
+    echo "# Test Coverage Report"
+    echo ""
+    echo "Generated: $(date '+%Y-%m-%d %H:%M:%S')"
     echo ""
     
-    # Check if coverage report exists
-    if [ -f "_build/test/cover/index.html" ]; then
-        echo "📊 Coverage report available at: _build/test/cover/index.html"
-        echo "   Open in browser: file://$(pwd)/_build/test/cover/index.html"
+    # Extract the detailed coverage report from rebar3 output
+    # Capture the full terminal output (same detail level)
+    echo "## Detailed Coverage Report"
+    echo ""
+    echo "\`\`\`"
+    
+    # Remove ANSI color codes and include all coverage output
+    # Keep everything - the same detail level as terminal
+    if [ -f "$COVERAGE_TMP" ] && [ -s "$COVERAGE_TMP" ]; then
+        sed -E 's/\x1b\[[0-9;]*m//g' "$COVERAGE_TMP"
     else
-        echo "⚠️  Coverage report not found"
+        echo "No coverage data available."
+        echo ""
+        echo "Coverage command may not have produced output."
+        echo "Try running manually: rebar3 as test cover"
+    fi
+    
+    echo "\`\`\`"
+    echo ""
+    
+    echo "## Coverage Targets"
+    echo ""
+    echo "| Test Type | Target Coverage |"
+    echo "|-----------|----------------|"
+    echo "| Unit Tests | 90% code coverage |"
+    echo "| Integration Tests | 85% path coverage |"
+    echo "| System Tests | 100% critical path coverage |"
+    echo "| Overall | 85% combined coverage |"
+    echo ""
+    
+} > "$COVERAGE_MD"
+
+# Force file system sync to ensure file is fully written
+sync "$COVERAGE_MD" 2>/dev/null || true
+
+# Verify the file was written successfully
+if [ -f "$COVERAGE_MD" ]; then
+    if [ -s "$COVERAGE_MD" ]; then
+        LINES=$(wc -l < "$COVERAGE_MD")
+        BYTES=$(wc -c < "$COVERAGE_MD")
+        echo "✅ Coverage report generated: $COVERAGE_MD"
+        echo "   File size: $BYTES bytes, $LINES lines"
+        echo "   Full path: $(pwd)/$COVERAGE_MD"
+    else
+        echo "⚠️  Warning: Coverage report file exists but is empty"
+        echo "   Check coverage command output above"
     fi
 else
-    echo "❌ Coverage report generation failed"
-    echo ""
+    echo "❌ Error: Coverage report file was not created"
 fi
+echo ""
+
+# Clean up temp file
+rm -f "$COVERAGE_TMP"
+
+# Re-enable exit on error for remainder of script
+set -e
 
 # Final sweep: ensure any late-written coverdata files are collected
 find . -maxdepth 1 -name "*.coverdata" -print -exec mv -f {} coverdata/ \; || true
@@ -134,7 +209,7 @@ echo ""
 echo "📁 Test Results Locations:"
 echo "   - Unit tests: test/results/"
 echo "   - Integration/System tests: logs/"
-echo "   - Coverage report: _build/test/cover/"
+echo "   - Coverage report: Working Docs/test_coverage_report.md"
 echo ""
 
 # Count test files
@@ -167,12 +242,6 @@ echo ""
 
 echo "=== All Tests Completed ==="
 echo ""
-
-# Optional: Open coverage report in browser (macOS)
-if command -v open &> /dev/null && [ -f "_build/test/cover/index.html" ]; then
-    echo "🌐 Opening coverage report in browser..."
-    open "_build/test/cover/index.html"
-fi
 
 echo "✅ Test suite execution completed successfully!"
 echo ""

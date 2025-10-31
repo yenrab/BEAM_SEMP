@@ -41,7 +41,7 @@ is_forbidden(M, F, _A) when is_atom(M), is_atom(F) ->
         true  -> true;
         false ->
             %% 2) Lookup in immutable policy
-            Map = persistent_term:get(?PT_MAP),
+            Map = semp_facades:persistent_term_get(?PT_MAP),
             case maps:get(M, Map, undefined) of
                 all -> true;                                % whole module banned
                 undefined -> false;

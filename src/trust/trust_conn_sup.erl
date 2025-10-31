@@ -22,18 +22,25 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes the trust_conn_sup DynamicSupervisor with no initial children.
-%% This supervisor manages dynamic trust connection FSM processes that are
-%% started on-demand when TLS connections are accepted.
+%% Initializes the trust_conn_sup supervisor with trust_conn_worker_sup as an initial child.
+%% This supervisor manages the worker supervisor and dynamic trust connection FSM processes
+%% that are started on-demand when TLS connections are accepted.
 %% @end
 %%--------------------------------------------------------------------
 -spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init([]) ->
+    %% Worker supervisor as initial permanent child
+    WorkerSup = {trust_conn_worker_sup, 
+                 {trust_conn_worker_sup, start_link, []}, 
+                 permanent, 
+                 5000, 
+                 supervisor, 
+                 [trust_conn_worker_sup]},
     %% DynamicSupervisor with one_for_one strategy
-    %% No initial children - all children are added dynamically
+    %% Worker supervisor starts first, then FSMs are added dynamically
     {ok, {#{strategy => one_for_one,
             intensity => 50,
             period => 10},
-          []}}.
+          [WorkerSup]}}.
 
 

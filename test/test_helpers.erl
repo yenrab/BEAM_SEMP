@@ -31,10 +31,12 @@ setup_test_env() ->
     
     %% IMPORTANT: Mock semp_facades:send (the facade function) FIRST before other modules are loaded
     %% This is the facade that wraps ssl:send - we should NEVER mock ssl:send directly
-    %% IMPORTANT: trust_token operations are now accessed through semp_facades, so we no longer
-    %% need to mock trust_token directly - mock_semp_facades() handles it
+    %% IMPORTANT: According to the test coverage plan, internal semp/trust modules (trust_token,
+    %% trust_suspicion, semp_whitelist, semp_policy) should be mocked directly, NOT through facades.
+    %% semp_facades only contains facades for external dependencies (SSL, inet, io, persistent_term).
     %% Use the proven mock_modules helper functions that work in other tests
     mock_modules:mock_semp_facades(),
+    mock_modules:mock_trust_token(),
     mock_modules:mock_trust_suspicion(),
     mock_modules:mock_semp_whitelist(),
     mock_modules:mock_semp_policy(),
@@ -60,7 +62,8 @@ setup_test_env() ->
 %% @end
 %%--------------------------------------------------------------------
 cleanup_test_env({WhitelistTab, PolicyTab}) ->
-    meck:unload(),
+    %% Safely unload mocks (ignore errors if processes are still using them)
+    try meck:unload() catch _:_ -> ok end,
     %% Safely delete ETS tables (ignore if already deleted)
     try ets:delete(WhitelistTab) catch _:_ -> ok end,
     try ets:delete(PolicyTab) catch _:_ -> ok end,

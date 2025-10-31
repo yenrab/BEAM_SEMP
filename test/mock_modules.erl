@@ -87,43 +87,64 @@ mock_semp_facades() ->
         {ok, {test_socket, make_ref()}} 
     end),
     
-    %% Mock trust_token facade functions
-    meck:expect(semp_facades, trust_token_ensure, fun() -> ok end),
-    meck:expect(semp_facades, trust_token_validate, fun(Token, _FP) -> 
-        case Token of
-            %% Make invalid token explicit for negative tests
-            <<"invalid_token">> -> {error, invalid_token};
-            _ -> ok
-        end 
-    end),
-    meck:expect(semp_facades, trust_token_issue, fun(_FP) -> 
-        true 
-    end),
-    meck:expect(semp_facades, trust_token_token_for, fun(_FP) -> 
-        <<"test_token_", (integer_to_binary(erlang:system_time(microsecond)))/binary>> 
-    end),
-    meck:expect(semp_facades, trust_token_revoke_fp, fun(_FP) -> 
-        ok 
-    end),
+    %% Note: semp_facades should NOT contain facade functions for internal semp/trust modules
+    %% (trust_token, trust_suspicion, semp_whitelist, semp_policy). These should be mocked directly.
+    %% Only external dependencies (SSL, inet, io, persistent_term) go through facades.
     
     ok.
 
 %%--------------------------------------------------------------------
 mock_trust_token() ->
-    %% Try to unload any existing mock first
-    try meck:unload(trust_token) catch _:_ -> ok end,
+    %% Safely determine if the module is already mocked
+    ValidationResult = case catch meck:validate(trust_token) of
+        {'EXIT', {not_mocked, _}} -> false;
+        Result -> Result
+    end,
     
-    %% Create a new mock (module should already be loaded by the application)
-    meck:new(trust_token, [unstick, passthrough]),
+    %% Create the mock (only if not already mocked)
+    case ValidationResult of
+        false ->
+            case meck:new(trust_token, [unstick, passthrough]) of
+                ok -> ok;
+                {error, {already_started, _}} -> ok;
+                {error, _Reason} ->
+                    %% If that fails, try unloading first (but catch errors)
+                    try meck:unload(trust_token) catch _:_ -> ok end,
+                    case meck:new(trust_token, [unstick, passthrough]) of
+                        ok -> ok;
+                        {error, {already_started, _}} -> ok;
+                        {error, Reason2} -> 
+                            error({mock_creation_failed, trust_token, Reason2})
+                    end
+            end;
+        _ -> 
+            %% Already mocked, just update expectations
+            ok
+    end,
     
-    %% Mock token validation - always succeeds for testing
-    meck:expect(trust_token, validate, fun(_Token, _State) -> 
-        {ok, #{client_id => <<"test_client">>, permissions => any}} 
+    %% Mock ensure/0 - just return ok (table should already exist)
+    meck:expect(trust_token, ensure, fun() -> 
+        ok
+    end),
+    
+    %% Mock token validation - succeed for valid tokens, fail for invalid ones
+    %% Note: trust_token:validate/2 returns ok on success, {error, Reason} on failure
+    meck:expect(trust_token, validate, fun(Token, _FP) -> 
+        case Token of
+            <<"invalid_token">> -> {error, invalid_token};
+            _ -> ok
+        end
     end),
     
     %% Mock token issuance
-    meck:expect(trust_token, issue, fun(_State) -> 
-        {ok, <<"test_token_", (integer_to_binary(erlang:system_time(microsecond)))/binary>>} 
+    %% Note: trust_token:issue/1 returns true (from ets:insert/2)
+    meck:expect(trust_token, issue, fun(_FP) -> 
+        true
+    end),
+    
+    %% Mock token retrieval
+    meck:expect(trust_token, token_for, fun(_FP) -> 
+        <<"test_token_", (integer_to_binary(erlang:system_time(microsecond)))/binary>>
     end),
     
     ok.

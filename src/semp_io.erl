@@ -29,20 +29,20 @@ print_color(ColorSpec, Fmt, Args) ->
 %% Write once to stderr; fall back to user, then group leader only if needed.
 put_line(IOData) ->
     Line = [IOData, $\n],
-    case catch io:put_chars(standard_error, Line) of
+    case catch semp_facades:io_put_chars(standard_error, Line) of
         ok -> ok;
         {'EXIT', _} -> try_user(Line);
         {error, _}  -> try_user(Line)
     end.
 
 try_user(Line) ->
-    case catch io:put_chars(user, Line) of
+    case catch semp_facades:io_put_chars(user, Line) of
         ok -> ok;
         _  -> try_gl(Line)
     end.
 
 try_gl(Line) ->
-    case catch io:put_chars(group_leader(), Line) of
+    case catch semp_facades:io_put_chars(group_leader(), Line) of
         ok -> ok;
         _  -> ok
     end.

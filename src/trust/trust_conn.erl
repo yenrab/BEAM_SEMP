@@ -168,7 +168,7 @@ maybe_recv_token_or_issue(Sock, FP) ->
         {ok, Bin} ->
             case safe_term(Bin) of
                 #{t := token_present, token := T} ->
-                    case semp_facades:trust_token_validate(T, FP) of
+                    case trust_token:validate(T, FP) of
                         ok ->
 			    logger:debug("trust_token: presented token is valid ~p~n",[T]),
                             %% Fast path: token good; proceed straight to CALL.
@@ -191,8 +191,8 @@ maybe_recv_token_or_issue(Sock, FP) ->
         {error, timeout} ->
             %% No token presented: treat as first-time client → issue token then await CALL
 	    logger:debug("trust_conn: no client token presented for ~p~n",[FP]),
-            semp_facades:trust_token_issue(FP),
-	    GeneratedToken=case semp_facades:trust_token_token_for(FP) of
+            trust_token:issue(FP),
+	    GeneratedToken=case trust_token:token_for(FP) of
 		    error -> 
 			    semp_facades:close(Sock),
 			    exit(token_error);
@@ -392,7 +392,7 @@ handle_mfa(Sock, FP, Type, M, F, A, Args, ReqId) ->
 maybe_quarantine_and_revoke(FP) ->
     case (catch trust_suspicion:is_trusted(FP)) of
         false ->
-            catch semp_facades:trust_token_revoke_fp(FP),
+            catch trust_token:revoke_fp(FP),
             quarantined;
         _ -> ok
     end.
@@ -527,7 +527,7 @@ bump_up_maybe_quarantine_close(Sock, FP, Reason) ->
     case (catch trust_suspicion:is_trusted(FP)) of
         false ->
             %% Quarantined: kill any fast-path token and drop
-            catch semp_facades:trust_token_revoke_fp(FP),
+            catch trust_token:revoke_fp(FP),
             logger:warning("quarantined ~p due to ~p (bump=~p)", [FP, Reason, Res]),
             semp_facades:close(Sock), exit(quarantined);
         true ->

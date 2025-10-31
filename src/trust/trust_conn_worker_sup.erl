@@ -13,12 +13,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the per-connection worker supervisor.
+%% Starts the per-connection worker supervisor with a locally registered name.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
-    supervisor:start_link(?MODULE, []).
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 %%--------------------------------------------------------------------
 %% @doc

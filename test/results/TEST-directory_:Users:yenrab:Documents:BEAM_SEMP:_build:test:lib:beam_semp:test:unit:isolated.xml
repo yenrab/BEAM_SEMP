@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuite tests="6" failures="0" errors="0" skipped="0" time="1.760" name="directory &quot;/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/beam_semp/test/unit/isolated&quot;">
+<testsuite tests="6" failures="0" errors="0" skipped="0" time="1.762" name="directory &quot;/Users/yenrab/Documents/BEAM_SEMP/_build/test/lib/beam_semp/test/unit/isolated&quot;">
   <testcase time="0.000" name="fsm_minimal_test:0 test_fsm_initialization">
     <system-out>
     </system-out>
@@ -20,7 +20,7 @@
     <system-out>
     </system-out>
   </testcase>
-  <testcase time="0.394" name="fsm_unit_tests_fixed:0 setup_fsm_test">
+  <testcase time="0.429" name="fsm_unit_tests_fixed:0 setup_fsm_test">
     <system-out>
     </system-out>
   </testcase>

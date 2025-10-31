@@ -91,7 +91,7 @@ init([]) ->
 			WTableName = semp_whitelist:ensure(trust),%load the whitelist
 			trust_suspicion:ensure(),%create the suspicion table
 			trust_suspicion:seed_from_whitelist(WTableName),
-			semp_facades:trust_token_ensure(),
+			trust_token:ensure(),
 		        %% 1) Read config from the correct app
     			Port = case application:get_env(trust, port) of
                				{ok, P} -> P;

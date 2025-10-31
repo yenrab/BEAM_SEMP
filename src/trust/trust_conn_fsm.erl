@@ -40,7 +40,6 @@
     max_age_timer,
     idle_timer,
     max_age_expired = false,
-    worker_sup,
     client_id,
     req_ids = sets:new([{version, 2}]),  %% tracks in-flight req_ids
     worker_monitors = #{}  %% maps Pid -> ReqId
@@ -276,14 +275,25 @@ handle_active_request(Socket, Bin, State) ->
                                     ResetState = reset_idle_timer(NewState),
                                     {next_state, ?ACTIVE, ResetState};
                                 {error, duplicate} ->
+                                    %% Duplicate request - just ignore and continue
+                                    semp_facades:setopts(Socket, [{active, once}]),
+                                    ResetState = reset_idle_timer(State),
+                                    {next_state, ?ACTIVE, ResetState};
+                                {error, supervisor_unavailable} ->
+                                    %% Supervisor not available - log error but don't terminate connection
+                                    %% This allows the FSM to retry on subsequent requests
+                                    logger:warning("trust_conn_fsm: worker supervisor unavailable, refusing request"),
                                     semp_facades:setopts(Socket, [{active, once}]),
                                     ResetState = reset_idle_timer(State),
                                     {next_state, ?ACTIVE, ResetState};
                                 {error, _Reason} ->
-                                    logger:debug("trust_conn_fsm: spawn_worker failed, terminating"),
-                                    send_goaway(protocol, 0, Socket),
-                                    semp_facades:close(Socket),
-                                    {stop, normal, State}
+                                    %% Other worker start failures - log and continue processing
+                                    %% Workers can fail to start for various reasons (permissions, etc.)
+                                    %% but we shouldn't terminate the entire connection
+                                    logger:warning("trust_conn_fsm: failed to start worker: ~p", [_Reason]),
+                                    semp_facades:setopts(Socket, [{active, once}]),
+                                    ResetState = reset_idle_timer(State),
+                                    {next_state, ?ACTIVE, ResetState}
                             end;
                         {error, Reason} ->
                             logger:debug("trust_conn_fsm: decode_request failed with reason: ~p, terminating", [Reason]),
@@ -412,7 +422,7 @@ handle_worker_down_draining(Pid, Reason, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_client_cancel(Socket, State) ->
-    #state{worker_sup = WorkerSup, client_id = ClientId, peer_info = PeerInfo} = State,
+    #state{client_id = ClientId, peer_info = PeerInfo} = State,
     
     %% Log client disconnection
     logger:info("trust_conn_fsm: client disconnected ~p from ~p", [ClientId, PeerInfo]),
@@ -421,13 +431,8 @@ handle_client_cancel(Socket, State) ->
     telemetry:execute([trust, client, disconnect], #{},
         #{client_id => ClientId, peer_info => PeerInfo, socket => Socket}),
     
-    %% Kill all workers immediately
-    if
-        WorkerSup =/= undefined ->
-            supervisor:terminate_child(trust_conn_worker_sup, WorkerSup);
-        true ->
-            ok
-    end,
+    %% Workers under trust_conn_worker_sup are temporary and will clean up automatically
+    %% The worker supervisor is now supervised by trust_conn_sup, so no manual termination needed
     
     %% Close socket and transition to closing
     semp_facades:close(Socket),
@@ -467,20 +472,16 @@ transition_to_active(State) ->
     %% Start max-age timer
     MaxAgeTimer = erlang:send_after(Config#session_config.max_age_ms, self(), {internal, limit_reached}),
     
-    %% Start or reuse worker supervisor robustly
-    WorkerSup = case whereis(trust_conn_worker_sup) of
-        undefined ->
-            case trust_conn_worker_sup:start_link() of
-                {ok, P} -> P;
-                {error, {already_started, P}} -> P;
-                {error, _} -> undefined
-            end;
-        Pid -> Pid
+    %% Verify worker supervisor is available (it's a singleton in the supervision tree)
+    case whereis(trust_conn_worker_sup) of
+        undefined -> 
+            logger:error("trust_conn_fsm: trust_conn_worker_sup not available for client ~p", [ClientId]);
+        _Pid -> 
+            ok
     end,
     
     NewState = State#state{
-        max_age_timer = MaxAgeTimer,
-        worker_sup = WorkerSup
+        max_age_timer = MaxAgeTimer
     },
     
     %% Emit telemetry for session start
@@ -600,7 +601,7 @@ safe_term(Bin) ->
 %%--------------------------------------------------------------------
 validate_token(Token, State) ->
     #state{client_id = ClientId} = State,
-    case semp_facades:trust_token_validate(Token, ClientId) of
+    case trust_token:validate(Token, ClientId) of
         ok -> ok;
         {ok, _} -> ok;  %% Handle case where validate returns {ok, TokenData}
         {error, _Reason} -> {error, invalid_token}
@@ -619,13 +620,13 @@ issue_token(Token, State) ->
         [ClientId, PeerInfo, Token]),
     
     %% Validate current token before issuing new one
-    case semp_facades:trust_token_validate(Token, ClientId) of
+    case trust_token:validate(Token, ClientId) of
         ok ->
             %% Current token is valid, issue new token
-            case semp_facades:trust_token_issue(ClientId) of
+            case trust_token:issue(ClientId) of
                 true ->
                     %% Issue returns true, now get the token
-                    case semp_facades:trust_token_token_for(ClientId) of
+                    case trust_token:token_for(ClientId) of
                         error ->
                             logger:error("trust_conn_fsm: failed to retrieve token for client ~p after issue", [ClientId]),
                             {error, token_retrieval_failed};
@@ -684,50 +685,63 @@ decode_request(Bin) ->
 %% @end
 %%--------------------------------------------------------------------
 spawn_worker(Request, State) ->
-    #state{worker_sup = WorkerSup, socket = Socket, client_id = ClientId, 
+    #state{socket = Socket, client_id = ClientId, 
            req_ids = ReqIds, worker_monitors = Monitors} = State,
     
     ReqId = element(2, Request),  %% Extract req_id from tuple
     
-    %% Check for duplicate
-    case sets:is_element(ReqId, ReqIds) of
-        true ->
-            logger:warning("Duplicate req_id ~p from ~p, ignoring", [ReqId, ClientId]),
-            telemetry:execute([trust, request, refuse], #{}, 
-                #{reason => duplicate, req_id => ReqId}),
-            {error, duplicate};
-        false ->
-            NewReqIds = sets:add_element(ReqId, ReqIds),
-            case Request of
-                {call, ReqId, M, F, A, Args} ->
-                    WorkerSpec = #{
-                        id => {trust_rpc_worker, ReqId},
-                        start => {trust_rpc_worker, start_link, [self(), ReqId, call, {M, F, A}, Args, ClientId]},
-                        restart => temporary,
-                        shutdown => 4000,
-                        type => worker,
-                        modules => [trust_rpc_worker]
-                    },
-                    case supervisor:start_child(WorkerSup, WorkerSpec) of
-                        {ok, Pid} ->
-                            %% Monitor the worker and track mapping
-                            erlang:monitor(process, Pid),
-                            NewMonitors = maps:put(Pid, ReqId, Monitors),
-                            telemetry:execute([trust, request, accept], #{}, 
-                                #{type => call, req_id => ReqId}),
-                            NewState = State#state{
-                                inflight = State#state.inflight + 1,
-                                calls_total = State#state.calls_total + 1,
-                                req_ids = NewReqIds,
-                                worker_monitors = NewMonitors
+    %% Get worker supervisor from supervision tree (singleton)
+    WorkerSup = case whereis(trust_conn_worker_sup) of
+        undefined -> 
+            logger:error("trust_conn_fsm: trust_conn_worker_sup not available for client ~p", [ClientId]),
+            undefined;
+        Pid -> Pid
+    end,
+    
+    %% Check if supervisor is available
+    case WorkerSup of
+        undefined ->
+            {error, supervisor_unavailable};
+        _ ->
+            %% Check for duplicate
+            case sets:is_element(ReqId, ReqIds) of
+                true ->
+                    logger:warning("Duplicate req_id ~p from ~p, ignoring", [ReqId, ClientId]),
+                    telemetry:execute([trust, request, refuse], #{}, 
+                        #{reason => duplicate, req_id => ReqId}),
+                    {error, duplicate};
+                false ->
+                    NewReqIds = sets:add_element(ReqId, ReqIds),
+                    case Request of
+                        {call, ReqId, M, F, A, Args} ->
+                            WorkerSpec = #{
+                                id => {trust_rpc_worker, ReqId},
+                                start => {trust_rpc_worker, start_link, [self(), ReqId, call, {M, F, A}, Args, ClientId]},
+                                restart => temporary,
+                                shutdown => 4000,
+                                type => worker,
+                                modules => [trust_rpc_worker]
                             },
-                            {ok, NewState};
-                        {error, Reason} ->
-                            logger:error("trust_conn_fsm: failed to start worker for client ~p: ~p", [ClientId, Reason]),
-                            telemetry:execute([trust, worker, start_failed], #{},
-                                #{client_id => ClientId, req_id => ReqId, reason => Reason, socket => Socket}),
-                            {error, worker_start_failed}
-                    end;
+                            case supervisor:start_child(WorkerSup, WorkerSpec) of
+                                {ok, WorkerPid} ->
+                                    %% Monitor the worker and track mapping
+                                    erlang:monitor(process, WorkerPid),
+                                    NewMonitors = maps:put(WorkerPid, ReqId, Monitors),
+                                    telemetry:execute([trust, request, accept], #{}, 
+                                        #{type => call, req_id => ReqId}),
+                                    NewState = State#state{
+                                        inflight = State#state.inflight + 1,
+                                        calls_total = State#state.calls_total + 1,
+                                        req_ids = NewReqIds,
+                                        worker_monitors = NewMonitors
+                                    },
+                                    {ok, NewState};
+                                {error, Reason} ->
+                                    logger:error("trust_conn_fsm: failed to start worker for client ~p: ~p", [ClientId, Reason]),
+                                    telemetry:execute([trust, worker, start_failed], #{},
+                                        #{client_id => ClientId, req_id => ReqId, reason => Reason, socket => Socket}),
+                                    {error, worker_start_failed}
+                            end;
                 {cast, ReqId, M, F, A, Args} ->
                     WorkerSpec = #{
                         id => {trust_rpc_worker, ReqId},
@@ -738,10 +752,10 @@ spawn_worker(Request, State) ->
                         modules => [trust_rpc_worker]
                     },
                     case supervisor:start_child(WorkerSup, WorkerSpec) of
-                        {ok, Pid} ->
+                        {ok, WorkerPid} ->
                             %% Monitor the worker and track mapping
-                            erlang:monitor(process, Pid),
-                            NewMonitors = maps:put(Pid, ReqId, Monitors),
+                            erlang:monitor(process, WorkerPid),
+                            NewMonitors = maps:put(WorkerPid, ReqId, Monitors),
                             telemetry:execute([trust, request, accept], #{}, 
                                 #{type => cast, req_id => ReqId}),
                             NewState = State#state{
@@ -758,6 +772,7 @@ spawn_worker(Request, State) ->
                             {error, worker_start_failed}
                     end
             end
+        end
     end.
 
 %%--------------------------------------------------------------------
@@ -768,7 +783,7 @@ spawn_worker(Request, State) ->
 terminate(Reason, StateName, State) ->
     %% Handle case where State might not be properly initialized
     case State of
-        #state{max_age_timer = Timer, idle_timer = IdleTimer, worker_sup = WorkerSup, client_id = ClientId} ->
+        #state{max_age_timer = Timer, idle_timer = IdleTimer, client_id = ClientId} ->
             %% Emit telemetry for session end
             telemetry:execute([trust, session, 'end'], 
                 #{age_ms => 0},  %% TODO: calculate actual age
@@ -790,19 +805,11 @@ terminate(Reason, StateName, State) ->
                     ok
             end,
             
-            %% Terminate worker supervisor (tolerate missing sup in tests)
-            if
-                WorkerSup =/= undefined ->
-                    case whereis(trust_conn_worker_sup) of
-                        undefined -> ok;
-                        _ -> catch supervisor:terminate_child(trust_conn_worker_sup, WorkerSup)
-                    end;
-                true ->
-                    ok
-            end;
+            %% Worker supervisor is now supervised by trust_conn_sup, so no manual termination needed
+            %% Workers are temporary and will clean up automatically
+            ok;
         _Other ->
             %% State is not properly initialized, just log and continue
-            logger:warning("trust_conn_fsm: terminating with uninitialized state: ~p", [State])
-    end,
-    
-    ok.
+            logger:warning("trust_conn_fsm: terminating with uninitialized state: ~p", [State]),
+            ok
+    end.

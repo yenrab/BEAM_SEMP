@@ -70,6 +70,9 @@ init_per_suite(Config) ->
 %% @end
 %%--------------------------------------------------------------------
 end_per_suite(Config) ->
+    %% Stop application first to stop all processes using mocked modules
+    application:stop(beam_semp),
+    
     %% Get tables from config and cleanup (handle case where tables might be deleted)
     WhitelistTab = proplists:get_value(whitelist_tab, Config),
     PolicyTab = proplists:get_value(policy_tab, Config),
@@ -84,8 +87,6 @@ end_per_suite(Config) ->
             end
     end,
     
-    %% Stop application
-    application:stop(beam_semp),
     Config.
 
 %%--------------------------------------------------------------------
@@ -93,49 +94,28 @@ end_per_suite(Config) ->
 %% @end
 %%--------------------------------------------------------------------
 init_per_testcase(_TestCase, Config) ->
-    %% Start supervisors (check if already running)
-    ConnSupPid = case whereis(trust_conn_sup) of
+    %% Supervisors should already be running from the application start
+    %% Verify they exist (trust_conn_worker_sup is started as a child of trust_conn_sup)
+    case whereis(trust_conn_worker_sup) of
         undefined ->
-            case trust_conn_sup:start_link() of
-                {ok, ConnPid} -> ConnPid;
-                {error, {already_started, ConnPid}} -> ConnPid;
-                {error, ConnReason} -> throw({conn_sup_start_failed, ConnReason})
-            end;
-        ConnPid -> ConnPid
-    end,
-    
-    WorkerSupPid = case whereis(trust_conn_worker_sup) of
-        undefined ->
-            case trust_conn_worker_sup:start_link() of
-                {ok, WorkerPid} -> WorkerPid;
-                {error, {already_started, WorkerPid}} -> WorkerPid;
-                {error, WorkerReason} -> throw({worker_sup_start_failed, WorkerReason})
-            end;
-        WorkerPid -> WorkerPid
-    end,
-    
-    [{conn_sup, ConnSupPid}, {worker_sup, WorkerSupPid} | Config].
+            ct:fail("trust_conn_worker_sup not found in supervision tree - application may not have started correctly");
+        WorkerSupPid ->
+            case whereis(trust_conn_sup) of
+                undefined ->
+                    ct:fail("trust_conn_sup not found in supervision tree - application may not have started correctly");
+                ConnSupPid ->
+                    [{conn_sup, ConnSupPid}, {worker_sup, WorkerSupPid} | Config]
+            end
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Test case cleanup.
 %% @end
 %%--------------------------------------------------------------------
 end_per_testcase(_TestCase, Config) ->
-    %% Stop supervisors gracefully
-    ConnSupPid = ?config(conn_sup, Config),
-    WorkerSupPid = ?config(worker_sup, Config),
-    
-    %% Stop supervisors (they will clean up their children)
-    case is_process_alive(ConnSupPid) of
-        true -> gen_server:stop(ConnSupPid);
-        false -> ok
-    end,
-    
-    case is_process_alive(WorkerSupPid) of
-        true -> gen_server:stop(WorkerSupPid);
-        false -> ok
-    end,
-    
+    %% Supervisors are part of the supervision tree and should not be stopped
+    %% They will be cleaned up when the application stops
+    %% Just clean up any FSM processes that might be running
     Config.
 
 %%--------------------------------------------------------------------
@@ -341,18 +321,27 @@ fsm_rejects_invalid_token(_Config) ->
     PeerInfo = test_helpers:create_test_peer_info(),
     SessionConfig = test_helpers:create_test_session_config(),
     
-    %% Start FSM
+    %% Start FSM and monitor it
     {ok, Pid} = trust_conn_fsm:start_link(Socket, PeerInfo, SessionConfig),
+    MRef = erlang:monitor(process, Pid),
     
     %% Send invalid token
     Token = <<"invalid_token">>,
     Frame = term_to_binary(#{t => token, token => Token}),
     gen_statem:cast(Pid, {ssl, Socket, Frame}),
-    timer:sleep(100),
     
-    %% Verify FSM has closed
-    ?assertNot(is_process_alive(Pid)),
-    ok.
+    %% Wait for FSM to terminate (with timeout)
+    receive
+        {'DOWN', MRef, process, Pid, _Reason} ->
+            %% FSM terminated as expected
+            ?assertNot(is_process_alive(Pid)),
+            ok
+    after 1000 ->
+            %% FSM didn't terminate - fail the test
+            erlang:demonitor(MRef, [flush]),
+            ?assertNot(is_process_alive(Pid)),
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc Tests FSM sends GOAWAY on protocol error.

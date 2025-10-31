@@ -71,14 +71,15 @@ init_per_suite(Config) ->
 %% @end
 %%--------------------------------------------------------------------
 end_per_suite(Config) ->
+    %% Stop application first to stop all processes using mocked modules
+    application:stop(beam_semp),
+    
     %% Cleanup test environment
     case proplists:get_value(test_env, Config) of
         undefined -> ok;
         TestEnv -> test_helpers:cleanup_test_env(TestEnv)
     end,
     
-    %% Stop application
-    application:stop(beam_semp),
     Config.
 
 %%--------------------------------------------------------------------
@@ -299,12 +300,19 @@ system_multiple_sessions_isolated(_Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc Helper function to ensure supervisor is started.
+%% Supervisors should already be running from the application start.
 %% @end
 %%--------------------------------------------------------------------
 ensure_supervisor_started(SupervisorName) ->
     case whereis(SupervisorName) of
         undefined -> 
-            {ok, Pid} = SupervisorName:start_link(),
-            Pid;
-        Pid -> Pid
+            %% Supervisor should be started by the application
+            %% If it's not running, that's an error
+            error({supervisor_not_started, SupervisorName});
+        Pid -> 
+            %% Verify it's actually alive
+            case is_process_alive(Pid) of
+                true -> Pid;
+                false -> error({supervisor_dead, SupervisorName})
+            end
     end.
